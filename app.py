@@ -259,7 +259,7 @@ class App(ctk.CTk):
                 widget.abs_place()
             elif widget.rel_pos:
                 widget.rel_place()
-
+                print("Ciao")
             else:
                 widget.grid_place()
 
