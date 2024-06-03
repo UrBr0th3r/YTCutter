@@ -60,10 +60,11 @@ import customtkinter as ct
 from moviepy.editor import VideoFileClip
 
 class VideoTrimmer:
-    def __init__(self, master):
+    def __init__(self, master, video_file):
         self.master = master
         self.progress_bar = ct.CTkProgressBar(master, width=200)
         self.progress_bar.pack()
+        self.video_file = video_file
 
     def trim_video(self, start_time, end_time):
         # Open the video file

@@ -136,6 +136,7 @@ class Button(ctk.CTkButton, Methods):
 
     def extract(self, entry):
         self.extracted = entry.get()
+        print(f"{self.text}: self.extracted set to {self.extracted}")
 
 
 class OptionMenu(Methods, ctk.CTkOptionMenu):
@@ -196,7 +197,7 @@ class Entry(Methods, ctk.CTkEntry):
 
 class App(ctk.CTk):
     font: ctk.CTkFont
-    gui: dict[str, list[Union[Methods, Button]]]
+    gui: dict[str, list[Union[Methods, Button, Entry]]]
     dim: tuple[int, int]
     font: ctk.CTkFont = None
     def __init__(self, dim: tuple[int, int], title: str, *, font: tuple[str, int] = None):
@@ -205,20 +206,30 @@ class App(ctk.CTk):
         self.geometry(f"{dim[0]}x{dim[1]}")
         self.title(title)
 
-
         ctk.set_default_color_theme("green")
-        self.link_entry = Entry(self, 0.4, 0.35, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Write YouTube Link")
+
+        # download gui
+        self.link_entry = Entry(self, 0.4, 0.35, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
         self.download_button = Button(self, "Download", 0.8, 0.35, height=0.1, relative_dimension=True, relative_position=True)
         self.download_button.configure(command=lambda: self.download_button.extract(self.link_entry))
+
+        # file gui
+        self.file_entry = Entry(self, 0.4, 0.35, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
+        self.check_button = Button(self, "Check", 0.8, 0.35, height=0.1, relative_dimension=True, relative_position=True)
+        self.check_button.configure(command= lambda: self.check_button.extract(self.file_entry))
+
+        # range gui: start end -> blank; progress bar will be a sum of 2 progress bar, both initialized like in trash.py
+
+
         self.gui = {
             "Download" : [
                 self.link_entry,
                 self.download_button
 
             ],
-            "File" : [
-                Button(self, "ciao1", 0, 0, grid_position=True),
-                Button(self, "ciao2", 1, 0, grid_position=True)
+            "File": [
+                self.file_entry,
+                self.check_button
             ]
         }
         # text = self.add_text(str(is_running_in_console()), 10, 10)
@@ -226,15 +237,15 @@ class App(ctk.CTk):
         self.optionMenu = OptionMenu(self, list(self.gui.keys()), 0.5, 0.1, relative_position=True, command=self.set_gui_on_change)
         #self.checkbox = self.add_optionmenu(list(self.gui.keys()), 0.5, 0.1, 1, relative_position=True, relative_dimensions=True, command=self.set_gui_on_change, color="red")
         #self.after(100, self.adjust, 600)
+
         if font is not None:
             self.set_font(self, font)
 
-        download_bool: bool = False
+        """download_bool: bool = False
         while not download_bool:
-            if app.download_button.extracted is not None:
-                print(f"Found: {app.download_button.extracted}")
-                download_bool = True
-
+            if self.download_button.extracted is not None:
+                print(f"Found: {self.download_button.extracted}")
+                download_bool = True"""
         return
 
 
@@ -259,7 +270,6 @@ class App(ctk.CTk):
                 widget.abs_place()
             elif widget.rel_pos:
                 widget.rel_place()
-                print("Ciao")
             else:
                 widget.grid_place()
 
@@ -267,6 +277,7 @@ class App(ctk.CTk):
 
 if __name__ == "__main__":
     app = App((600, 500), "CTK", font=("Arial", 20))
+    print("App done")
     app.mainloop()
 
 
