@@ -138,6 +138,9 @@ class Button(ctk.CTkButton, Methods):
         self.extracted = entry.get()
         print(f"{self.text}: self.extracted set to {self.extracted}")
 
+        # call download thread
+
+
 
 class OptionMenu(Methods, ctk.CTkOptionMenu):
     width:int = 200
@@ -218,11 +221,11 @@ class App(ctk.CTk):
         self.check_button = Button(self, "Check", 0.8, 0.35, height=0.1, relative_dimension=True, relative_position=True)
         self.check_button.configure(command= lambda: self.check_button.extract(self.file_entry))
 
-        # range gui: start end -> blank; progress bar will be a sum of 2 progress bar, both initialized like in trash.py
+        # range gui: start end -> blank; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
 
 
         self.gui = {
-            "Download" : [
+            "Download": [
                 self.link_entry,
                 self.download_button
 
