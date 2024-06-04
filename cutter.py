@@ -258,7 +258,7 @@ if __name__ == "__main__":
                         end += float(end_args[i].split(".")[2])/pow(10, len(end_args[i].split(".")[2]))
                     except IndexError:
                         pass
-                print(f"Cutting {video_loc} to {start_args[i] if start_args[i] is not None else "start"}:{end_args[i] if end_args[i] is not None else "end"}")
+                print(f"Cutting {video_loc} to {start_args[i] if start_args[i] is not None else 'start'}:{end_args[i] if end_args[i] is not None else 'end'}")
                 if (start < 0 or start > video_clip.duration) or (end < 0 or end > video_clip.duration) or end < start:
                     video_clip.close()
                     raise ValueError(f"Error in time value, check {filename} -h")

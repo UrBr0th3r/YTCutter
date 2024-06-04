@@ -1,35 +1,14 @@
 import customtkinter as ctk
 from typing import Callable, Union
 import ctypes
-from abc import ABC,abstractmethod
+from abc import ABC
 import threading
 import yt_dlp
+import os
+import string
 
-class DownloadThread(threading.Thread):
-    def __init__(self, link, progress_bar, label):
-        threading.Thread.__init__(self)
-        self.link = link
-        self.progress_bar = progress_bar
-        self.label = label
-        self.daemon = True
+dwl_dir = os.path.join(os.getenv("USERPROFILE"), "Downloads")
 
-    def run(self):
-        ytdl_opts = {
-            'progress_hooks': [self.my_hook],
-            "format": "best",
-            "prefer_player": "ios"
-        }
-        self.progress_bar.abs_place() if not self.progress_bar.rel_pos else self.progress_bar.rel_place()
-        self.label.abs_place() if not self.label.rel_pos else self.label.rel_place()
-        self.progress_bar.set(0)
-        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-            ydl.download([self.link])
-
-    def my_hook(self, d):
-        if d['status'] == 'downloading':
-
-            self.progress_bar.set(float(d['_percent_str'].strip('%'))/100)
-            self.label.configure(text=f"Downloading... {d['_percent_str']}  ETA: {d['_eta_str']}")
 
 
 class Methods(ABC, ctk.CTkBaseClass):
@@ -45,9 +24,7 @@ class Methods(ABC, ctk.CTkBaseClass):
 
     def set_font(self, font:ctk.CTkFont):
         self.configure(font=font)
-    @abstractmethod
-    def base_command(self, entry):
-        pass
+
 
 
 def is_running_in_console():
@@ -67,7 +44,7 @@ class Label(ctk.CTkLabel, Methods):
     x: float
     y: float
     rel_pos: bool
-    def __init__(self, app, text:str, x:float, y:float, *,  width:float = 0, height:float = 0, color: str = None, relative_position: bool = False, relative_dimension: bool = False):
+    def __init__(self, app, text:str, x:float, y:float, *,  width:float = 0, height:float = 0, color: str = None, relative_position: bool = False, relative_dimension: bool = False, wrap_length: float = 0):
         super().__init__(app, text=text)
         self.x = x
         self.y = y
@@ -77,10 +54,21 @@ class Label(ctk.CTkLabel, Methods):
         if relative_dimension:
             width *= app.dim[0]
             height *= app.dim[1]
+            wrap_length *= app.dim[0]
         if width != 0:
             self.configure(width=width)
         if height != 0:
             self.configure(height=height)
+        if wrap_length != 0:
+            self.configure(wraplength=wrap_length)
+        else:
+            self.configure(wraplength=0.9*app.dim[0])
+    def set_text(self, text):
+        self.configure(text=text)
+        self.configure(font=(app.font.cget("family"), self.winfo_width()//app.font.cget("size")))
+        # TODO: attenzione: la funzione app.font.measure(),
+        #  può misurare la lunghezza di una stringa.
+        #  grazie a questo si può probabilmente splittare o cambiare font
 
 class ProgressBar(ctk.CTkProgressBar, Methods):
     x: float
@@ -101,6 +89,31 @@ class ProgressBar(ctk.CTkProgressBar, Methods):
         if color is not None:
             self.configure(fg_color=color)
         self.set(starting_point)
+
+class Entry(Methods, ctk.CTkEntry):
+    x: float
+    y: float
+    rel_pos: bool
+    def __init__(self, app, x: float, y:float, *args, width: float = 0, height: float = 0, bg_text: str = None, color: str = None, relative_position:bool = False, relative_dimension: bool = False):
+        super().__init__(app, *args)
+        self.x = x
+        self.y = y
+        self.rel_pos = relative_position
+        if relative_dimension:
+            width *= app.dim[0]
+            height *= app.dim[1]
+        if width != 0:
+            self.configure(width=width)
+        if height != 0:
+            self.configure(height=height)
+        if bg_text is not None:
+            self.configure(placeholder_text=bg_text)
+        if color is not None:
+            self.configure(background=color)
+
+
+    def base_command(self, entry):
+        print(f"you wrote {self.get()} ")
 
 class Button(ctk.CTkButton, Methods):
     x:float
@@ -134,11 +147,13 @@ class Button(ctk.CTkButton, Methods):
     def base_command(self, name):
         print(f"{name} has been pressed.")
 
-    def extract(self, entry):
+    def extract(self, entry: Entry, pbar: ProgressBar, label: Label = None):
         self.extracted = entry.get()
-        print(f"{self.text}: self.extracted set to {self.extracted}")
-
-        # call download thread
+        # print(f"{self.text}: self.extracted set to {self.extracted}")
+        if any(x not in self.extracted for x in ["youtu", ".", "/"]):
+            raise ValueError("Bad link")
+        thr = DownloadThread(self.extracted, pbar, label)
+        thr.start()
 
 
 
@@ -148,7 +163,7 @@ class OptionMenu(Methods, ctk.CTkOptionMenu):
     y:float
     rel_pos:bool
     def __init__(self, app, values:list[str], x:float, y:float, color:str = None, command:Callable = None, *, relative_position:bool = False):
-        super().__init__(app, values=values, width=self.width)
+        super().__init__(app, values=values, width=self.width, height=40)
         self.x = x
         self.y = y
         self.rel_pos = relative_position
@@ -173,30 +188,44 @@ class OptionMenu(Methods, ctk.CTkOptionMenu):
     def base_command(self, choice):
         print(f"{choice} has been selected")
 
-class Entry(Methods, ctk.CTkEntry):
-    x: float
-    y: float
-    rel_pos: bool
-    def __init__(self, app, x: float, y:float, *args, width: float = 0, height: float = 0, bg_text: str = None, color: str = None, relative_position:bool = False, relative_dimension: bool = False):
-        super().__init__(app, *args)
-        self.x = x
-        self.y = y
-        self.rel_pos = relative_position
-        if relative_dimension:
-            width *= app.dim[0]
-            height *= app.dim[1]
-        if width != 0:
-            self.configure(width=width)
-        if height != 0:
-            self.configure(height=height)
-        if bg_text is not None:
-            self.configure(placeholder_text=bg_text)
-        if color is not None:
-            self.configure(background=color)
 
+class DownloadThread(threading.Thread):
+    def __init__(self, link: str, progress_bar: ProgressBar, label: Label = None):
+        threading.Thread.__init__(self)
+        self.link = link
+        self.progress_bar = progress_bar
+        self.label = label
+        self.daemon = True
 
-    def base_command(self, entry):
-        print(f"you wrote {self.get()} ")
+    def run(self):
+        ytdl_opts = {
+            'progress_hooks': [self.my_hook],
+            "format": "best",
+            "prefer_player": "ios"
+        }
+        try:
+            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+                title = ydl.extract_info(self.link, download=False).get("title", None)
+            title = title.replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
+            self.dwl_loc: str = os.path.join(dwl_dir, title)
+            ytdl_opts["outtmpl"] = self.dwl_loc
+            self.progress_bar.abs_place() if not self.progress_bar.rel_pos else self.progress_bar.rel_place()
+            if self.label is not None:
+                self.label.abs_place() if not self.label.rel_pos else self.label.rel_place()
+            self.progress_bar.set(0)
+            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+                ydl.download([self.link])
+            self.label.set_text(text=f"Video downloaded in {self.dwl_loc}")
+            self.progress_bar.place_forget()
+        except yt_dlp.utils.DownloadError as e:
+            self.label.set_text(e)
+            # TODO: NON FUNZIONA PERCHE???
+    def my_hook(self, d):
+        if d['status'] == 'downloading':
+
+            self.progress_bar.set(float(d['_percent_str'].strip('%'))/100)
+            self.label.set_text(text=f"Downloading... {d['_percent_str']}  ETA: {d['_eta_str']}")
+
 
 class App(ctk.CTk):
     font: ctk.CTkFont
@@ -207,19 +236,24 @@ class App(ctk.CTk):
         super().__init__()
         self.dim = dim
         self.geometry(f"{dim[0]}x{dim[1]}")
+        self.resizable(False, False)
         self.title(title)
 
         ctk.set_default_color_theme("green")
 
+        # general gui
+        self.progress_bar = ProgressBar(self, 0.5, 0.5, width=0.9, relative_position=True, relative_dimension=True)
+        self.label = Label(self, "Starting download ...", 0.5, 0.6, relative_position=True)
+
         # download gui
-        self.link_entry = Entry(self, 0.4, 0.35, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
-        self.download_button = Button(self, "Download", 0.8, 0.35, height=0.1, relative_dimension=True, relative_position=True)
-        self.download_button.configure(command=lambda: self.download_button.extract(self.link_entry))
+        self.link_entry = Entry(self, 0.4, 0.25, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
+        self.download_button = Button(self, "Download", 0.8, 0.25, height=0.1, relative_dimension=True, relative_position=True)
+        self.download_button.configure(command=lambda: self.download_button.extract(self.link_entry, self.progress_bar, label=self.label))
 
         # file gui
-        self.file_entry = Entry(self, 0.4, 0.35, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
-        self.check_button = Button(self, "Check", 0.8, 0.35, height=0.1, relative_dimension=True, relative_position=True)
-        self.check_button.configure(command= lambda: self.check_button.extract(self.file_entry))
+        self.file_entry = Entry(self, 0.4, 0.25, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
+        self.check_button = Button(self, "Check", 0.8, 0.25, height=0.1, relative_dimension=True, relative_position=True)
+        self.check_button.configure(command= lambda: self.check_button.extract(self.file_entry, self.progress_bar, self.label))
 
         # range gui: start end -> blank; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
 
@@ -227,7 +261,9 @@ class App(ctk.CTk):
         self.gui = {
             "Download": [
                 self.link_entry,
-                self.download_button
+                self.download_button,
+                #self.progress_bar,
+                #self.dwl_label
 
             ],
             "File": [
@@ -279,7 +315,7 @@ class App(ctk.CTk):
 
 
 if __name__ == "__main__":
-    app = App((600, 500), "CTK", font=("Arial", 20))
+    app = App((600, 500), "YTCutter", font=("Arial", 20))
     print("App done")
     app.mainloop()
 
