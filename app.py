@@ -9,9 +9,33 @@ import string
 
 dwl_dir = os.path.join(os.getenv("USERPROFILE"), "Downloads")
 
+def bst(font_fam: str, text:str, dim:int, l:int, r:int) -> int:
+    if l == r:
+        return l
+    mid: int = (l+r)//2
+    if ctk.CTkFont(font_fam, mid).measure(text) <= dim:
+        return bst(font_fam, text, dim, mid, r)
+    return bst(font_fam, text, dim, l, mid)
+
+def get_maximum_font_dim(width: int, height: int, text: str, wrapper: int, font: ctk.CTkFont) -> int:
+    base_dim: int = font.cget("size") # row height?
+    family: str = font.cget("family")
+    min_dim: int = 14
+    if font.measure(text) <= width:
+        return base_dim
+    elif ctk.CTkFont(family, min_dim).measure(text) < width:
+        return bst(family, text, width, 14, base_dim)
+    else:
+        ...
+        # TODO: splitta il testo con il wrap
+    # TODO: controlla anche che il testo non superi la dimensione massima d'altezza (abbassando anche sotto il valore minimo)
 
 
-class Methods(ABC, ctk.CTkBaseClass):
+
+
+
+
+class Methods(ABC):
     x:float
     y:float
     font: ctk.CTkFont
@@ -39,6 +63,9 @@ def is_running_in_console():
     except Exception as e:
         return False
 
+
+
+# CTK EXPANSIONS
 
 class Label(ctk.CTkLabel, Methods):
     x: float
@@ -154,6 +181,7 @@ class Button(ctk.CTkButton, Methods):
             raise ValueError("Bad link")
         thr = DownloadThread(self.extracted, pbar, label)
         thr.start()
+    # TODO: spostarlo nella main?
 
 
 
@@ -188,6 +216,32 @@ class OptionMenu(Methods, ctk.CTkOptionMenu):
     def base_command(self, choice):
         print(f"{choice} has been selected")
 
+class ScrollableFrame(Methods, ctk.CTkScrollableFrame):
+    x: float
+    y: float
+    res_pos: bool
+    def __init__(self, app, x:float, y:float, *args, width: float = 0, height: float = 0, relative_position: bool = False, relative_dimension: bool = False):
+        super().__init__(app) # , width=400, height=700)
+        self.x = x
+        self.y = y
+        self.res_pos = relative_position
+        if relative_dimension:
+            width *= app.dim[0]
+            height *= app.dim[1]
+        if width != 0:
+            self.configure(width=width)
+        if height != 0:
+            self.configure(height=height)
+        for widget in args:
+            widget.place_forget()
+            widget.master = self
+            #widget.rel_place() if widget.rel_pos else widget.abs_place()
+            widget.pack()
+        self.rel_place() if self.res_pos else self.abs_place()
+    # TODO: aggiungi alle solite caratteristiche *args e quelli sono gli elementi da inserire nel Frame
+
+
+# THREADS
 
 class DownloadThread(threading.Thread):
     def __init__(self, link: str, progress_bar: ProgressBar, label: Label = None):
@@ -218,8 +272,9 @@ class DownloadThread(threading.Thread):
             self.label.set_text(text=f"Video downloaded in {self.dwl_loc}")
             self.progress_bar.place_forget()
         except yt_dlp.utils.DownloadError as e:
-            self.label.set_text(e)
-            # TODO: NON FUNZIONA PERCHE???
+            self.label.rel_place()
+            self.label.set_text("Error: Connection refused. Check your internet connection")
+            # TODO: NON FUNZIONA PERCHE??? (cerco di contenere l'errore di connessione)
     def my_hook(self, d):
         if d['status'] == 'downloading':
 
@@ -242,21 +297,22 @@ class App(ctk.CTk):
         ctk.set_default_color_theme("green")
 
         # general gui
-        self.progress_bar = ProgressBar(self, 0.5, 0.5, width=0.9, relative_position=True, relative_dimension=True)
-        self.label = Label(self, "Starting download ...", 0.5, 0.6, relative_position=True)
+        self.progress_bar = ProgressBar(self, 0.5, 0.8, width=0.9, relative_position=True, relative_dimension=True)
+        self.label = Label(self, "Starting download ...", 0.5, 0.9, relative_position=True)
 
         # download gui
-        self.link_entry = Entry(self, 0.4, 0.25, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
-        self.download_button = Button(self, "Download", 0.8, 0.25, height=0.1, relative_dimension=True, relative_position=True)
+        self.link_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
+        self.download_button = Button(self, "Download", 0.8375, 0.25, width=0.25, height=0.1, relative_dimension=True, relative_position=True, command=lambda: self.print_text_size("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
         self.download_button.configure(command=lambda: self.download_button.extract(self.link_entry, self.progress_bar, label=self.label))
 
         # file gui
-        self.file_entry = Entry(self, 0.4, 0.25, width=0.6, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
-        self.check_button = Button(self, "Check", 0.8, 0.25, height=0.1, relative_dimension=True, relative_position=True)
+        self.file_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
+        self.check_button = Button(self, "Check", 0.8375, 0.25, width=0.25, height=0.1, relative_dimension=True, relative_position=True)
         self.check_button.configure(command= lambda: self.check_button.extract(self.file_entry, self.progress_bar, self.label))
 
-        # range gui: start end -> blank; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
-
+        # range gui: start end -> progress in scrollframe; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
+        self.scrollframe = ScrollableFrame(self, 0.5, 0.5, width=0.9, height=0.3, relative_position=True, relative_dimension=True)
+        # TODO: aggiungi gli effettivi widget nello scrollframe (bisogna usare la grid e self.scrollframe come "app"
 
         self.gui = {
             "Download": [
@@ -311,11 +367,13 @@ class App(ctk.CTk):
                 widget.rel_place()
             else:
                 widget.grid_place()
+    def print_text_size(self, text: str):
+        print(self.font.measure(text))
 
 
 
 if __name__ == "__main__":
-    app = App((600, 500), "YTCutter", font=("Arial", 20))
+    app = App((800, 600), "YTCutter", font=("Arial", 20))
     print("App done")
     app.mainloop()
 
