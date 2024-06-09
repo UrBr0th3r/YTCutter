@@ -9,7 +9,6 @@ import string
 
 dwl_dir = os.path.join(os.getenv("USERPROFILE"), "Downloads")
 
-
 def bst(font_fam: str, text:str, dim:int, l:int, r:int) -> int:
     if l == r:
         return l
