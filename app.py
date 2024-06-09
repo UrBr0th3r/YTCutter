@@ -264,7 +264,7 @@ class DownloadThread(threading.Thread):
         ytdl_opts = {
             'progress_hooks': [self.my_hook],
             "format": "best",
-            # TODO: migliora la qualità: devi dividere video e audio e convergerli (nello scratch)
+            # TODO: migliora la qualità: devi dividere video e audio e convergerli (nello scratch del portatile)
             "prefer_player": "ios"
         }
         try:
