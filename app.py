@@ -4,6 +4,7 @@ from typing import Callable, Union
 from abc import ABC
 import threading
 import yt_dlp
+import ffmpeg
 from moviepy.editor import VideoFileClip
 from proglog import ProgressBarLogger
 import os
@@ -252,7 +253,7 @@ class ScrollableFrame(Methods, ctk.CTkScrollableFrame):
 
 class DownloadThread(threading.Thread):
     def __init__(self, link: str, progress_bar: ProgressBar, app, label: Label = None):
-        threading.Thread.__init__(self)
+        super().__init__()
         self.link = link
         self.progress_bar = progress_bar
         self.label = label
@@ -262,7 +263,8 @@ class DownloadThread(threading.Thread):
     def run(self):
         ytdl_opts = {
             'progress_hooks': [self.my_hook],
-            "format": "bestvideo+bestaudio/best",
+            "format": "best",
+            # TODO: migliora la qualità: devi dividere video e audio e convergerli (nello scratch)
             "prefer_player": "ios"
         }
         try:
@@ -327,7 +329,7 @@ class MyBarLogger(ProgressBarLogger):
 
 class VideoTrimmer(threading.Thread):
     def __init__(self, app, progbar: ProgressBar, label: Label, video_file: str, ranges: list[tuple[str, str]]):
-        threading.Thread.__init__(self)
+        super().__init__()
         self.master = app
         self.progress_bar = progbar
         self.label = label
@@ -341,8 +343,6 @@ class VideoTrimmer(threading.Thread):
 
             self.trim_video(self.range_values[rngIdx][0], self.range_values[rngIdx][1], rngIdx)
             sleep(1)
-            # trm.setup(self.range_values[rngIdx][0], self.range_values[rngIdx][1], rngIdx)
-            # trm.start()
         for rowN in range(self.master.row+1):
             try:
                 self.master.remove_widgets(self.master.scrollframe, rowN)
@@ -439,7 +439,7 @@ class PopupManager:
 
 
     def show_popup(self, event):
-        self.popup_id = self.app.after(500, self.create_popup, event)
+        self.popup_id = self.app.after(1000, self.create_popup, event)
     def create_popup(self, event):
         self.popup = Popup(self.app, self.dim, fg_color="#3b3b3b")
         self.popup.wm_overrideredirect(True)
