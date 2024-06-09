@@ -498,6 +498,7 @@ Minutes.Seconds.Milliseconds:
 00.23.324 = 23s.324ms
         """
 
+
         self.popup_button = Button(self, "?", 0.9, 0.1, width=dim[0]*0.05, height=dim[0]*0.05, relative_position=True, relative_dimension=False, state="disabled", color="#777777")
         self.popup_button.rel_place() if self.popup_button.rel_pos else self.popup_button.abs_place()
         self.popup = PopupManager(self, general_popup_text, [self.popup_button], dim=(300, 240))
