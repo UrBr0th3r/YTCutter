@@ -1,0 +1,6 @@
+customtkinter==5.2.2
+ffmpeg==1.4
+moviepy==1.0.3
+MyUtils==0.0.21
+proglog==0.1.10
+yt_dlp==2024.5.27
