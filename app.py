@@ -588,10 +588,13 @@ Minutes.Seconds.Milliseconds:
         self.range_values.pop(row_rem)
 
     def download(self):
-        extracted = self.link_entry.get()
+        try:
+            extracted = self.link_entry.get()
+        except yt_dlp.utils.DownloadError as e:
+            self.label.set_text(f"Error: {str(e)}")
+            self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
+            return
         # print(f"{self.text}: self.extracted set to {self.extracted}")
-        if any(x not in extracted for x in ["youtu", ".", "/"]):
-            raise ValueError("Bad link")
         thr = DownloadThread(extracted, self.progress_bar, self, self.label)
         thr.start()
 
