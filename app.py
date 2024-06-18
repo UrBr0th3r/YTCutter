@@ -10,10 +10,27 @@ from proglog import ProgressBarLogger
 import os
 import string
 from time import time, sleep
+import inspect
 
 dwl_dir = os.path.join(os.getenv("USERPROFILE"), "Downloads")
 
+debug = False
+
+# yt_dlp_loc = r".\bin\yt-dlp.exe"
+
+def printfunc():
+    if debug:
+        frame = inspect.currentframe().f_back
+        func_name = frame.f_code.co_name
+        args, _, _, values = inspect.getargvalues(frame)
+        print(f"Entered function: {func_name if func_name != '__init__' else 'defined class'}. Args: "+(' | '.join(f"{arg} = {values[arg]}" for arg in args)))
+
+def printdb(to_print: str):
+    if debug:
+        print(to_print)
+
 def bst(font_fam: str, text:str, dim:int, l:int, r:int) -> int:
+    printfunc()
     if l == r-1:
         return l
     mid: int = (l+r)//2
@@ -22,6 +39,7 @@ def bst(font_fam: str, text:str, dim:int, l:int, r:int) -> int:
     return bst(font_fam, text, dim, l, mid)
 
 def get_maximum_font_dim(width: int, height: int, text: str, font: ctk.CTkFont) -> int:
+    printfunc()
     base_dim: int = font.cget("size") # row height?
     family: str = font.cget("family")
     min_dim: int = 14
@@ -69,6 +87,8 @@ class Label(ctk.CTkLabel, Methods):
     rel_pos: bool
     def __init__(self, app, text:str, x:float, y:float, *, height:float = 0, color: str = None, relative_position: bool = False, relative_dimension: bool = False, wrap_length: int = 0, **kwargs):
         super().__init__(app, **kwargs)
+        printfunc()
+
         self.x = x
         self.y = y
         self.rel_pos = relative_position
@@ -90,6 +110,7 @@ class Label(ctk.CTkLabel, Methods):
     def set_text(self, text):
         """new_font = ctk.CTkFont(app.font.cget("family"), get_maximum_font_dim(self.wrap, 0, text, app.font))
         self.configure(font=new_font)"""
+        printfunc()
         new_font = self.app.font
         to_check = text
         lines = []
@@ -123,6 +144,8 @@ class ProgressBar(ctk.CTkProgressBar, Methods):
     rel_pos: bool
     def __init__(self, app, x:float, y:float, *, width:float = 0, height:float =0, color: str = None, relative_position: bool = False, relative_dimension: bool = False, starting_point:float = 0, **kwargs):
         super().__init__(app, **kwargs)
+        printfunc()
+
         self.x = x
         self.y = y
         self.rel_pos = relative_position
@@ -143,6 +166,8 @@ class Entry(Methods, ctk.CTkEntry):
     rel_pos: bool
     def __init__(self, app, x: float, y:float, *, width: float = 0, height: float = 0, bg_text: str = None, color: str = None, relative_position:bool = False, relative_dimension: bool = False, **kwargs):
         super().__init__(app, **kwargs)
+        printfunc()
+
         self.x = x
         self.y = y
         self.rel_pos = relative_position
@@ -171,6 +196,8 @@ class Button(ctk.CTkButton, Methods):
     extracted: str = None
     def __init__(self, app, text: str, x:float, y:float, *, width:float = 0, height:float = 0, color: str = None, command: Callable = None, relative_position: bool = False, relative_dimension: bool = False, grid_position: bool = False, **kwargs):
         super().__init__(app, text=text, **kwargs)
+        printfunc()
+
         self.x = x
         self.y = y
         self.text = text
@@ -205,6 +232,7 @@ class OptionMenu(Methods, ctk.CTkOptionMenu):
     rel_pos:bool
     def __init__(self, app, values:list[str], x:float, y:float, color:str = None, command:Callable = None, *, relative_position:bool = False, **kwargs):
         super().__init__(app, values=values, width=self.width, height=40, **kwargs)
+        printfunc()
         self.x = x
         self.y = y
         self.rel_pos = relative_position
@@ -235,6 +263,7 @@ class ScrollableFrame(Methods, ctk.CTkScrollableFrame):
     res_pos: bool
     def __init__(self, app, x:float, y:float, *, width: float = 0, height: float = 0, relative_position: bool = False, relative_dimension: bool = False, **kwargs):
         super().__init__(app, **kwargs) # , width=400, height=700)
+        printfunc()
         self.x = x
         self.y = y
         self.res_pos = relative_position
@@ -254,6 +283,7 @@ class ScrollableFrame(Methods, ctk.CTkScrollableFrame):
 class DownloadThread(threading.Thread):
     def __init__(self, link: str, progress_bar: ProgressBar, app, label: Label = None):
         super().__init__()
+        printfunc()
         self.link = link
         self.progress_bar = progress_bar
         self.label = label
@@ -261,10 +291,9 @@ class DownloadThread(threading.Thread):
         self.app = app
 
     def run(self):
+        printfunc()
         ytdl_opts = {
             'progress_hooks': [self.my_hook],
-            "format": "best",
-            # TODO: migliora la qualità: devi dividere video e audio e convergerli (nello scratch del portatile)
             "prefer_player": "ios"
         }
         try:
@@ -272,13 +301,30 @@ class DownloadThread(threading.Thread):
                 title = ydl.extract_info(self.link, download=False).get("title", None)
             title = title.replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
             self.dwl_loc: str = os.path.join(dwl_dir, title)
-            ytdl_opts["outtmpl"] = self.dwl_loc
+            # ytdl_opts["outtmpl"] = self.dwl_loc
+            self.progress_bar.set(0)
             self.progress_bar.abs_place() if not self.progress_bar.rel_pos else self.progress_bar.rel_place()
             if self.label is not None:
                 self.label.abs_place() if not self.label.rel_pos else self.label.rel_place()
-            self.progress_bar.set(0)
+
+            # Download
+            self.what: int = 0
+            tmp_video_path = os.path.join(dwl_dir, "video_tmp.mp4")
+            tmp_audio_path = os.path.join(dwl_dir, "audio_tmp.m4a")
+            # TODO: inserisci la scelta della qualità
+            ytdl_opts["format"] = "bestvideo"
+            ytdl_opts["outtmpl"] = tmp_video_path
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
                 ydl.download([self.link])
+            self.what = 1
+            ytdl_opts["format"] = "bestaudio"
+            ytdl_opts["outtmpl"] = tmp_audio_path
+            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+                ydl.download([self.link])
+            # Merge
+            # subprocess ffmpeg
+
+
             self.label.set_text(text=f"Video downloaded in {self.dwl_loc}")
             self.app.file_loc = self.dwl_loc
             self.progress_bar.place_forget()
@@ -288,12 +334,13 @@ class DownloadThread(threading.Thread):
     def my_hook(self, d):
         if d['status'] == 'downloading':
 
-            self.progress_bar.set(float(d['_percent_str'].strip('%'))/100)
-            self.label.set_text(text=f"Downloading... {d['_percent_str']}  ETA: {d['_eta_str']}")
+            self.progress_bar.set(float(d['_percent_str'].strip('%'))/200 + 0.5*self.what)
+            self.label.set_text(text=f"Downloading {"video" if self.what == 0 else "audio"}... {d['_percent_str']}  ETA: {d['_eta_str']}")
 
 class MyBarLogger(ProgressBarLogger):
     def __init__(self, app, progress_var, label_var):
         super().__init__()
+        printfunc()
         self.app = app
         self.progress_var = progress_var
         self.label_var: Label = label_var
@@ -303,10 +350,13 @@ class MyBarLogger(ProgressBarLogger):
         self.idx = 0
         self.name = ""
     def update_time(self, time):
+        printfunc()
         self.time = time
     def update_idx(self, idx):
+        printfunc()
         self.idx = idx
     def update_name(self, name):
+        printfunc()
         self.name = name
 
     def callback(self, **changes):
@@ -330,6 +380,7 @@ class MyBarLogger(ProgressBarLogger):
 class VideoTrimmer(threading.Thread):
     def __init__(self, app, progbar: ProgressBar, label: Label, video_file: str, ranges: list[tuple[str, str]]):
         super().__init__()
+        printfunc()
         self.master = app
         self.progress_bar = progbar
         self.label = label
@@ -339,6 +390,7 @@ class VideoTrimmer(threading.Thread):
         self.logger = MyBarLogger(self.master, self.progress_bar, self.label)
 
     def run(self) -> None:
+        printfunc()
         for rngIdx in range(len(self.range_values)):
 
             self.trim_video(self.range_values[rngIdx][0], self.range_values[rngIdx][1], rngIdx)
@@ -352,6 +404,7 @@ class VideoTrimmer(threading.Thread):
 
 
     def trim_video(self, start_ins: str | None, end_ins: str | None, idx: int):
+        printfunc()
         self.logger.update_time(time())
         self.logger.update_idx(idx)
         # Open the video file
@@ -421,6 +474,7 @@ class VideoTrimmer(threading.Thread):
 class Popup(ctk.CTkToplevel):
     def __init__(self, app, dim:tuple[int, int], **kwargs):
         super().__init__(app, **kwargs)
+        printfunc()
         self.dim = dim
         self.font = app.font
 
@@ -429,6 +483,7 @@ class PopupManager:
     popup = None
     popup_id = None
     def __init__(self, app, text:str, widgets: list[ctk.CTkBaseClass], dim:tuple[int, int] = (300,300)):
+        printfunc()
         self.app = app
         self.text:str = text
         self.dim:tuple[int,int] = dim
@@ -439,14 +494,17 @@ class PopupManager:
 
 
     def show_popup(self, event):
+        printfunc()
         self.popup_id = self.app.after(1000, self.create_popup, event)
     def create_popup(self, event):
+        printfunc()
         self.popup = Popup(self.app, self.dim, fg_color="#3b3b3b")
         self.popup.wm_overrideredirect(True)
         self.popup.geometry(f"+{event.x_root - (self.popup.cget('width')+10)}+{event.y_root + 10}") if self.dim == (0,0) else self.popup.geometry(f"{self.dim[0]}x{self.dim[1]}+{event.x_root -(self.dim[0]+10)}+{event.y_root +20}")
         label = ctk.CTkLabel(self.popup, text_color="#e5e5e5", text=self.text, wraplength=self.dim[0]-10)
         label.place(relx=0.5, rely=0.5, anchor="c")
     def hide_popup(self, event):
+        printfunc()
         if self.popup_id:
             self.app.after_cancel(self.popup_id)
             self.popup_id = None
@@ -461,6 +519,7 @@ class App(ctk.CTk):
     file_loc: str = None
     def __init__(self, dim: tuple[int, int], title: str, *, font: tuple[str, int] = None):
         super().__init__()
+        printfunc()
         self.dim = dim
         self.geometry(f"{dim[0]}x{dim[1]}")
         self.resizable(False, False)
@@ -468,6 +527,7 @@ class App(ctk.CTk):
         if font is not None:
             self.font = ctk.CTkFont(font[0], font[1])
         ctk.set_default_color_theme("green")
+        printdb("Set geometry, title and font")
 
         # general gui
         general_popup_text = """
@@ -507,7 +567,7 @@ Minutes.Seconds.Milliseconds:
         self.label = Label(self, "Starting download ...", 0.5, 0.8, relative_position=True)
 
         # download gui
-        self.link_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter YouTube link...")
+        self.link_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter video link...")
         self.download_button = Button(self, "Download", 0.8375, 0.25, width=0.25, height=0.1, relative_dimension=True, relative_position=True, command=self.download)#command=lambda: self.print_text_size("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
 
         # file gui
@@ -546,8 +606,10 @@ Minutes.Seconds.Milliseconds:
         if font:
             self.set_font(self, self.font)
 
+        printdb("Ended creating app")
         return
     def add_widget(self, orig_button: Button = None, start_link: Entry = None, end_link: Entry = None):
+        printfunc()
         if orig_button is None:
             self.row = 0
 
@@ -583,11 +645,13 @@ Minutes.Seconds.Milliseconds:
             print(self.range_values)
         #     pulsante.configure(state="disabled", fg_color=("gray", "darkgray"))
     def remove_widgets(self, grid_frame, row_rem):
+        printfunc()
         for widget in grid_frame.grid_slaves(row=row_rem):
             widget.grid_forget()
         self.range_values.pop(row_rem)
 
     def download(self):
+        printfunc()
         try:
             extracted = self.link_entry.get()
         except yt_dlp.utils.DownloadError as e:
@@ -599,13 +663,14 @@ Minutes.Seconds.Milliseconds:
         thr.start()
 
     def select_file(self):
+        printfunc()
         self.file_loc = fd.askopenfilename()
         self.file_entry.configure(state="normal")
         self.file_entry.delete(0, ctk.END)
         self.file_entry.insert(0, self.file_loc)
         self.file_entry.configure(state="readonly")
     def cut(self):
-
+        printfunc()
         if len(self.range_values) == 0 or all(rng == (None, None) for rng in self.range_values):
             self.label.set_text("Cannot cut: you didn't insert any range, or your ranges are all from start to end")
             self.label.rel_place()
@@ -623,6 +688,7 @@ Minutes.Seconds.Milliseconds:
 
 
     def set_font(self, parent, font: ctk.CTkFont):
+        printfunc()
         for widget in parent.winfo_children():
             try:
                 widget.set_font(font)
@@ -632,6 +698,7 @@ Minutes.Seconds.Milliseconds:
                 self.set_font(widget, font)
 
     def set_gui_on_change(self, choice):
+        printfunc()
         for spec_GUI in self.gui.values():
             for widget in spec_GUI:
                 widget.place_forget()
@@ -646,11 +713,24 @@ Minutes.Seconds.Milliseconds:
             else:
                 widget.grid_place()
     def print_text_size(self, text: str):
+        printfunc()
         print(self.font.measure(text))
 
 
 
 if __name__ == "__main__":
+
+
+    printdb("Started program")
     app = App((800, 600), "YTCutter", font=("Arial", 20))
-    print("App done")
+    printdb("App done")
     app.mainloop()
+
+
+# TODO: qualità audio/video + se si cerca di fare cut senza tagli dà un messaggio di errore sbagliato + gestire i millisecondi come .000 mentre 1.1.1 vuol dire: 1h, 1m, 1s + setup wizard + git lfs
+#  aggiungere:
+#  nella sezione file, fai che l'entry di scelta del file è modificabile, e controlla se il file scritto è valido. in caso può essere anche scelto con browse. crea un bottone sotto a browse che è proprio OK, che blocca la entry (fino a che non viene tagliato il video)
+#  nella sezione download, metti un menu a tendina sotto o sopra a download, che permette di far scegliere la qualità in cui si vuole scaricare il video.
+#  IMPORTANTE:
+#  ok a quanto pare ffmpeg non è nativo della libreria ffmpeg quindi si fa la struttura a cartella: crea un nuovo progetto con solo l'app.py e ci aggiungi bin con yt-dlp e ffmpeg. forse in questo modo si può usare anche nuitka
+#  dopodiché trovi un modo per estrarre dallo stdout del subprocess di bin/.exe e usarlo come hook per la gestione della progressbar
