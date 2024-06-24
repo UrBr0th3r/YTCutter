@@ -1,4 +1,4 @@
-
+from PIL import Image, ImageTk
 import customtkinter as ctk
 from customtkinter import filedialog as fd
 from typing import Callable, Union
@@ -65,15 +65,35 @@ class Methods(ABC):
     def set_font(self, font:ctk.CTkFont):
         self.configure(font=font)
 
+# TODO: magari aggiungi un metodo che configura sempre l'altezza e la larghezza in base a relative dimension e un metodo place che fa sempre
+#  rel_place() if rel_pos else abs_place()
 
 
 # CTK EXPANSIONS
+
+class Frame(ctk.CTkFrame, Methods):
+    x: float
+    y: float
+    rel_pos: bool
+    def __init__(self, app, x: float, y: float, width: float, height: float, relative_position: bool = False, relative_dimension: bool = False, **kwargs):
+        super().__init__(app, **kwargs)
+        self.x = x
+        self.y = y
+        self.rel_pos = relative_position
+        self.font = app.font
+        if relative_dimension:
+            width *= app.dim[0]
+            height *= app.dim[1]
+        self.dim = (width, height)
+
+        self.configure(width=round(width), height=round(height))
+
 
 class Label(ctk.CTkLabel, Methods):
     x: float
     y: float
     rel_pos: bool
-    def __init__(self, app, text:str, x:float, y:float, *, height:float = 0, color: str = None, relative_position: bool = False, relative_dimension: bool = False, wrap_length: int = 0, **kwargs):
+    def __init__(self, app, text:str, x:float, y:float, *, height:float = 0, color: str = None, relative_position: bool = False, relative_dimension: bool = False, wrap_length: int = 0, force_text: bool = False, **kwargs):
         super().__init__(app, **kwargs)
         dbg.printfunc()
 
@@ -93,7 +113,10 @@ class Label(ctk.CTkLabel, Methods):
 
         if height != 0:
             self.configure(height=height)
-        self.set_text(text)
+        if force_text:
+            self.configure(text=text)
+        else:
+            self.set_text(text)
 
     def set_text(self, text):
         """new_font = ctk.CTkFont(app.font.cget("family"), get_maximum_font_dim(self.wrap, 0, text, app.font))
@@ -125,6 +148,40 @@ class Label(ctk.CTkLabel, Methods):
         text = "\n".join(lines)
         self.configure(text=text)
         # per ora ho fatto solo uno split del testo in nell'ultima posizione di split
+
+class Canvas(ctk.CTkCanvas, Methods):
+    def __init__(self, app, x: float, y: float, width: float, height: float, relative_position: bool = False,
+                 relative_dimension: bool = False, **kwargs):
+        super().__init__(app, **kwargs)
+        self.x = x
+        self.y = y
+        self.rel_pos = relative_position
+        self.app = app
+        if relative_dimension:
+            width *= app.dim[0]
+            height *= app.dim[1]
+        self.configure(width=round(width), height=round(height))
+        self.images = []
+        self.rel_place() if self.rel_pos else self.abs_place()
+
+    def rectangle(self, x: float, y: float, width: float, height: float, color: str, rel_pos: bool = False,
+                  rel_dim: bool = False, alpha: float = 1):
+        if rel_pos:
+            x *= self.app.dim[0]
+            y *= self.app.dim[1]
+        if rel_dim:
+            width *= self.app.dim[0]
+            height *= self.app.dim[1]
+        rAlpha = round(alpha * 255)
+        rColor = self.app.winfo_rgb(color) + (rAlpha,)
+        img = Image.new("RGBA", (round(width), round(height)), rColor)
+        self.images.append(ImageTk.PhotoImage(img))
+        self.create_image(round(x), round(y), image=self.images[-1], anchor="nw")
+        self.create_rectangle(x, y, width + x, height + y)
+
+
+
+
 
 class ProgressBar(ctk.CTkProgressBar, Methods):
     x: float
@@ -390,6 +447,9 @@ class App(ctk.CTk):
         dbg.printfunc()
         self.dim = dim
         self.geometry(f"{dim[0]}x{dim[1]}")
+        self.iconbitmap("..\\..\\utils\\ico\\download.ico")
+        self.protocol("WM_DELETE_WINDOW", self.close)
+
         self.resizable(False, False)
         self.title(title)
         if font is not None:
@@ -625,9 +685,37 @@ REGEX:
         print(self.font.measure(text))
 
     def close(self):
+        if (hasattr(self, "it") and self.it.is_alive()) or (hasattr(self, "thr") and self.thr.is_alive()):
+            # ask widgets
+            self.askframe = Frame(self, .5, .4, .6, .2, relative_position=True, relative_dimension=True, fg_color="#616161")
+            self.askframe.rel_place() if self.askframe.rel_pos else self.askframe.abs_place()
+            asklabel = Label(self.askframe, "You have processes in progress. Are you sure you want to close the app?", .5,
+                             .2, relative_position=True, force_text=False, color="#000000")
+            asklabel.rel_place() if asklabel.rel_pos else asklabel.abs_place()
+            yes = Button(self.askframe, "YES", .25, .6, width=.4, height=.2, relative_position=True, relative_dimension=True,
+                         color="#00aa00", command=lambda: self.choose(True), hover_color="#00d100")
+            yes.rel_place() if yes.rel_pos else yes.abs_place()
+            no = Button(self.askframe, "NO", .75, .6, width=.4, height=.2, relative_dimension=True, relative_position=True,
+                        color="#aa0000", command=lambda: self.choose(False), hover_color="#d10000")
+            no.rel_place() if no.rel_pos else no.abs_place()
+            #raise NotImplementedError()
+        else:
+            self.destroy()
 
-        self.destroy()
-        # Doing: block closing app if thread are active
+
+        # Doing: set better font for label
+    def choose(self, choice: bool):
+        if choice:
+
+            if hasattr(self, "it") and self.it.is_alive():
+                self.it.stop()
+            if hasattr(self, "thr") and self.thr.is_alive():
+                self.thr.stop()
+            # self.after(2000, self.destroy)
+            self.destroy()
+        else:
+            self.askframe.destroy()
+            
 
 
 
@@ -637,21 +725,9 @@ if __name__ == "__main__":
     dbg.printdb("Started program")
     app = App((800, 600), "YTCutter", font=("Arial", 20))
     dbg.printdb("App done")
-    # app.iconbitmap(path/to/icon.ico)
     app.mainloop()
-    app.protocol("WM_DELETE_WINDOW", app.close)
-    try:
-        if app.it.is_alive():
-            app.it.stop()
-    except AttributeError:
-        pass
-    try:
-        if app.thr.is_alive():
-            app.thr.stop()
-    except AttributeError:
-        pass
 
-# TODO: gestire i millisecondi come .000 mentre 1.1.1 vuol dire: 1h, 1m, 1s + setup wizard + git lfs
+# TODO: setup wizard + git lfs
 #  aggiungere:
 #  nella sezione file, fai che l'entry di scelta del file è modificabile, e controlla se il file scritto è valido. in caso può essere anche scelto con browse. crea un bottone sotto a browse che è proprio OK, che blocca la entry (fino a che non viene tagliato il video)
 
