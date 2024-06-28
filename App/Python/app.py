@@ -447,7 +447,10 @@ class App(ctk.CTk):
         dbg.printfunc()
         self.dim = dim
         self.geometry(f"{dim[0]}x{dim[1]}")
-        self.iconbitmap("..\\..\\utils\\ico\\download.ico")
+
+        iconpath = ImageTk.PhotoImage(file="..\\..\\utils\\ico\\download.ico")
+        self.wm_iconbitmap()
+        self.iconphoto(False, iconpath)
         self.protocol("WM_DELETE_WINDOW", self.close)
 
         self.resizable(False, False)
@@ -690,20 +693,20 @@ REGEX:
             self.askframe = Frame(self, .5, .4, .6, .2, relative_position=True, relative_dimension=True, fg_color="#616161")
             self.askframe.rel_place() if self.askframe.rel_pos else self.askframe.abs_place()
             asklabel = Label(self.askframe, "You have processes in progress. Are you sure you want to close the app?", .5,
-                             .2, relative_position=True, force_text=False, color="#000000")
-            asklabel.rel_place() if asklabel.rel_pos else asklabel.abs_place()
+                             .25, relative_position=True, force_text=False, color="#000000")
             yes = Button(self.askframe, "YES", .25, .6, width=.4, height=.2, relative_position=True, relative_dimension=True,
                          color="#00aa00", command=lambda: self.choose(True), hover_color="#00d100")
-            yes.rel_place() if yes.rel_pos else yes.abs_place()
             no = Button(self.askframe, "NO", .75, .6, width=.4, height=.2, relative_dimension=True, relative_position=True,
                         color="#aa0000", command=lambda: self.choose(False), hover_color="#d10000")
+            self.set_font(self.askframe, self.font)
+            asklabel.rel_place() if asklabel.rel_pos else asklabel.abs_place()
+            yes.rel_place() if yes.rel_pos else yes.abs_place()
             no.rel_place() if no.rel_pos else no.abs_place()
             #raise NotImplementedError()
         else:
             self.destroy()
 
 
-        # Doing: set better font for label
     def choose(self, choice: bool):
         if choice:
 
@@ -711,6 +714,7 @@ REGEX:
                 self.it.stop()
             if hasattr(self, "thr") and self.thr.is_alive():
                 self.thr.stop()
+            # CHECK: close threads
             # self.after(2000, self.destroy)
             self.destroy()
         else:
@@ -720,8 +724,7 @@ REGEX:
 
 
 if __name__ == "__main__":
-
-
+    assert os.path.exists("..\\..\\utils\\ico\\download.ico")
     dbg.printdb("Started program")
     app = App((800, 600), "YTCutter", font=("Arial", 20))
     dbg.printdb("App done")

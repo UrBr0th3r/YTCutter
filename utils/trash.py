@@ -13,6 +13,8 @@ resolutions = {f.get("format_id"): f.get("resolution") for f in js.get("formats"
 
 for key in resolutions.keys():
     print(key, resolutions[key], type(key))"""
+import os.path
+
 """import subprocess, json
 
 command = (f".\\bin\\yt-dlp.exe https://www.youtube.com/watch?v=3_X_Hd1XpXE -J").split()
@@ -28,7 +30,7 @@ while True:
         js = json.loads(output.strip())
         print({f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "webm"})
 """
-from PIL import ImageTk, Image
+"""from PIL import ImageTk, Image
 import customtkinter as ctk
 from abc import ABC
 
@@ -83,3 +85,5 @@ cnv = Canvas(app, .5, .5, 1, 1, relative_position=True, relative_dimension=True)
 cnv.rectangle(50, 50, 100, 200, "#ff0000")
 cnv.rectangle(10, 10, 200, 150, "#00ff00", alpha=.5)
 app.mainloop()
+"""
+import os

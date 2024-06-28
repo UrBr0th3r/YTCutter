@@ -10,7 +10,7 @@ import time
 from utils.Utils import *
 from tkinter import messagebox
 import os
-import psutil
+
 import re
 
 yt_dlp_loc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "yt-dlp.exe")
@@ -35,6 +35,7 @@ class InfoThread(threading.Thread):
         if app:
             self.app = app
             self.option_select = option_select
+        self.stop_bool = False
     def run(self):
         self.get_info()
 
@@ -45,41 +46,44 @@ class InfoThread(threading.Thread):
             self.icon_text.configure(text_color="gray")
             self.icon_text.set_text("O")
             self.app.download_button.configure(state="disabled", fg_color="gray")
-            # SET ICON LOADING
         command = f"{yt_dlp_loc} --dump-json {self.newlink}".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, text=True)
         stdout, stderr = self.proc.communicate()
-        # CANARY
-        if self.app.canary:
-            if stderr:
-                self.icon_text.configure(text_color="red")
-                self.icon_text.set_text("X")
-                #print(f"Errori:\n{stderr}")
-            else:
-                self.icon_text.configure(text_color="green")
-                self.icon_text.set_text("✓")
-                js = json.loads(stdout)
-                self.title = js.get("title", None).replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
-                self.resolutions = {f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "mp4"}
-                if ("audio only" in self.resolutions.keys()):
-                    self.resolutions.pop("audio only")
-                self.duration = str(float(js.get("duration")))
-                if self.app:
-                    self.app.yt_info = [self.title, self.duration, self.resolutions]
-                    self.option_select.set("Resolution")
-                    self.option_select.configure(values=list(self.resolutions.keys())+["Best","Fast","Fastest"])
-                    self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
+        if not self.stop_bool:
+            # CANARY
+            if not self.app or self.app.canary:
+                if stderr:
+                    if self.app:
+                        self.icon_text.configure(text_color="red")
+                        self.icon_text.set_text("X")
+                    print(f"Errori:\n{stderr}")
+                else:
+                    if self.app:
+                        self.icon_text.configure(text_color="green")
+                        self.icon_text.set_text("✓")
+                    js = json.loads(stdout)
+                    self.title = js.get("title", None).replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
+                    self.resolutions = {f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "mp4"}
+                    if ("audio only" in self.resolutions.keys()):
+                        self.resolutions.pop("audio only")
+                    self.duration = str(float(js.get("duration")))
+                    print(self.title, self.resolutions, self.duration)
+                    if self.app:
+                        self.app.yt_info = [self.title, self.duration, self.resolutions]
+                        self.option_select.set("Resolution")
+                        self.option_select.configure(values=list(self.resolutions.keys())+["Best","Fast","Fastest"])
+                        self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
     def changelink(self, link):
         print("Changed link to "+link)
         self.newlink = link
     def stop(self):
         try:
-            proc_id = psutil.Process(self.proc.pid)
-            for proc in proc_id.children(recursive=True):
-                proc.terminate()
-            proc_id.terminate()
-        except psutil.NoSuchProcess:
-            pass
+            self.proc.kill()
+        except AttributeError as e:
+            print(e)
+        self.stop_bool = True
+
+        # CHECK: perché continua?
 
 class DownloadThread(threading.Thread):
 
@@ -99,6 +103,7 @@ class DownloadThread(threading.Thread):
         self.daemon = True
         self.video_out = r".\video_tmp.webm"
         self.audio_out = r".\audio_tmp.m4a"
+        self.stop_bool = False
         if app:
             self.app = app
             self.progress_bar = progress_bar
@@ -121,22 +126,23 @@ class DownloadThread(threading.Thread):
             else:
                 #print("Quality")
                 self.fastdownload(self.quality)
-            print(f"Video downloaded in {self.output_loc}")
-            if self.app:
-                self.progress_bar.set(1)
-                self.label.set_text(f"Video downloaded in {self.output_loc}")
+            if not self.stop_bool:
+                print(f"Video downloaded in {self.output_loc}")
+                if self.app:
+                    self.progress_bar.set(1)
+                    self.label.set_text(f"Video downloaded in {self.output_loc}")
         except Exception as e:
             print(e)
     def download(self, mode: str):
         #print(f"Starting {mode}")
         command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == "audio" else self.video_out} -f {"bestaudio[ext=m4a]" if mode == "audio" else "bestvideo[ext=mp4]" if mode == "Best" else self.quality}".split()
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
+        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
 
         start_time = time.time_ns()
-        print(f"Starting download {mode}")
+        print(f"Starting download {"audio" if mode == "audio" else "video"}")
         while True:
-            output = proc.stdout.readline()
-            if output == '' and proc.poll() is not None:
+            output = self.proc.stdout.readline()
+            if (output == '' and self.proc.poll() is not None) or self.stop_bool:
                 break
             if "ERROR" in output:
                 print(output)
@@ -162,56 +168,60 @@ class DownloadThread(threading.Thread):
                         self.label.set_text(text=f"Downloading {"audio" if mode == "audio" else "video"}... {self.perc}%  ETA: {self.eta}")
 
 
-        proc.wait()
-        print(f"\nDone downloading {mode}")
+        #self.proc.wait()
+        if not self.stop_bool:
+            print(f"\nDone downloading {mode}")
     def merge(self, video_loc:str, audio_loc:str):
         command = f"{ffmpeg_loc} -i {video_loc} -i {audio_loc} {self.output_loc} -c:v copy -c:a copy -qscale 0 -y"  # .split()
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         print("Start merging")
         start_time = time.time_ns()
-        output = proc.stdout
-        for line in output:
-            if "time=" in line:
-                done = get_text(line, ("time=", "bitrate"))
-                total = self.duration
-                doneT = Time(done, "hh:mm:ss.F")
-                totalT = Time(total, "S.F")
-                dones = doneT.in_secs()
-                totals = totalT.in_secs()
-                self.perc = round((dones * 100 / totals), 2)
-                if self.perc < 0:
-                    self.perc = 0.0
-                if self.perc > 100:
-                    self.perc = 100
-                ns = time.time_ns() - start_time
-                etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
-                if etat < 0:
-                    etat = 0.0
-                try:
-                    etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
-                except ValueError:
-                    etaT = Time("0", "S")
-                self.eta = etaT.classic()
-                print(f"\rMerging... {self.perc}%  ETA: {self.eta}", end="")
-                if self.app:
-                    self.progress_bar.set(self.perc / 100)
-                    self.label.set_text(text=f"Merging... {self.perc}%  ETA: {self.eta}")
+        output = self.proc.stdout
+        if not self.stop_bool:
+            for line in output:
+                if "time=" in line:
+                    done = get_text(line, ("time=", "bitrate"))
+                    total = self.duration
+                    doneT = Time(done, "hh:mm:ss.F")
+                    totalT = Time(total, "S.F")
+                    dones = doneT.in_secs()
+                    totals = totalT.in_secs()
+                    self.perc = round((dones * 100 / totals), 2)
+                    if self.perc < 0:
+                        self.perc = 0.0
+                    if self.perc > 100:
+                        self.perc = 100
+                    ns = time.time_ns() - start_time
+                    etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
+                    if etat < 0:
+                        etat = 0.0
+                    try:
+                        etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
+                    except ValueError:
+                        etaT = Time("0", "S")
+                    self.eta = etaT.classic()
+                    print(f"\rMerging... {self.perc}%  ETA: {self.eta}", end="")
+                    if self.app:
+                        self.progress_bar.set(self.perc / 100)
+                        self.label.set_text(text=f"Merging... {self.perc}%  ETA: {self.eta}")
 
         # proc.wait()
 
         # stdout, stderr = proc.communicate()
         # print(stdout, stderr)
-        os.remove(video_loc)
-        os.remove(audio_loc)
-        print("\nDone merging")
+        if not self.stop_bool:
+            os.remove(video_loc)
+            os.remove(audio_loc)
+            print("\nDone merging")
     def fastdownload(self, quality):
         command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {"best[ext=mp4]" if quality == "Fast" else "worst[ext=mp4]"}".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=False)
         start_time = time.time_ns()
         print(f"Starting fast download")
+
         while True:
             output = self.proc.stdout.readline()
-            if output == '' and self.proc.poll() is not None:
+            if (output == '' and self.proc.poll() is not None) or self.stop_bool:
                 break
             if output:
                 if "%" in output.strip():
@@ -228,14 +238,15 @@ class DownloadThread(threading.Thread):
                     if self.app:
                         self.progress_bar.set(self.perc / 100)
                         self.label.set_text(text=f"Downloading video... {self.perc}%  ETA: {self.eta}")
+        if not self.stop_bool:
+            print("Done fast downloading")
     def stop(self):
         try:
-            proc_id = psutil.Process(self.proc.pid)
-            for proc in proc_id.children(recursive=True):
-                proc.terminate()
-            proc_id.terminate()
-        except psutil.NoSuchProcess:
+            self.proc.kill()
+        except AttributeError:
             pass
+        self.stop_bool = True
+
 
 
 class MyBarLogger(ProgressBarLogger):
@@ -378,14 +389,18 @@ class TryThread(threading.Thread):
 
 
 if __name__ == "__main__":
-    """info = InfoThread("https://www.youtube.com/watch?v=PA07y")
-    info.start()"""
+    """info = InfoThread("https://www.youtube.com/watch?v=BOriG-wluJA")
+    info.start()
+    sleep(2)
+    info.stop()"""
 
     """dwl = DownloadThread("https://www.youtube.com/watch?v=3_X_Hd1XpXE", ".\\boh.mp4", "603", "1141.0")
     dwl.start()
-    dwl.join()"""
+    sleep(10)
+    dwl.stop()"""
 
-    print(VideoTrimmer.parse_time("22:1.45"))
+
+    #print(VideoTrimmer.parse_time("22:1.45"))
     # TODO: cambia Utils.Time con delle regex
 
     # print(dt.title)
