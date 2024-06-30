@@ -40,6 +40,7 @@ class InfoThread(threading.Thread):
         self.get_info()
 
     def get_info(self):
+        print("Getting info")
         if self.app:
             self.option_select.set("Loading")
             self.option_select.configure(values=[])
@@ -48,21 +49,27 @@ class InfoThread(threading.Thread):
             self.app.download_button.configure(state="disabled", fg_color="gray")
         command = f"{yt_dlp_loc} --dump-json {self.newlink}".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, text=True)
+        print(f"process done. alive: {self.proc.poll()}")
         stdout, stderr = self.proc.communicate()
+        print(self.newlink, self.stop_bool)
         if not self.stop_bool:
             # CANARY
-            if not self.app or self.app.canary:
-                if stderr:
-                    if self.app:
-                        self.icon_text.configure(text_color="red")
-                        self.icon_text.set_text("X")
-                    print(f"Errori:\n{stderr}")
+            if stderr:
+                if self.app:
+                    self.icon_text.configure(text_color="red")
+                    self.icon_text.set_text("X")
+                print(f"Errori:\n{stderr}")
+            else:
+                try:
+                    js = json.loads(stdout)
+                except json.decoder.JSONDecodeError as e:
+                    self.icon_text.configure(text_color="red")
+                    self.icon_text.set_text("X")
                 else:
                     if self.app:
                         self.icon_text.configure(text_color="green")
                         self.icon_text.set_text("✓")
-                    js = json.loads(stdout)
-                    self.title = js.get("title", None).replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
+                    self.title = js.get("title", "video_scaricato").replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
                     self.resolutions = {f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "mp4"}
                     if ("audio only" in self.resolutions.keys()):
                         self.resolutions.pop("audio only")
@@ -83,7 +90,39 @@ class InfoThread(threading.Thread):
             print(e)
         self.stop_bool = True
 
-        # CHECK: perché continua?
+        # CHECK: non continua più?, ERROR: il processo continua per qualche motivo, ma almeno stop_bool è true
+        #  quindi dovrebbe effettivamente non influire (va ad influire però sul processore)
+
+class FileInfoThread(threading.Thread):
+    def __init__(self, fileloc: str, app = None, icon_text = None):
+        super().__init__()
+        self.fileloc = fileloc
+        self.app = app
+        self.icon_text = icon_text
+        self.stop_bool = False
+        self.daemon = True
+        self.extension = ("3g2, 3gp, a64, ac3, ac4, adts, adx, aea, aiff, alaw, alp, amr, amv, apm, apng, aptx, aptx_hd, argo_asf, argo_cvg, asf, asf_stream, ass, ast, au, avi, avif, avm2, avs2, avs3, bit, d caca, caf, cavsvideo, chromaprint, codec2, codec2raw, crc, dash, data, daud, dfpwm, dirac, dnxhd, dts, dv, dvd, eac3, evc, f32be, f32le, f4v, f64be, f64le, ffmetadata, fifo, film_cpk, filmstrip, fits, flac, flv, framecrc, framehash, framemd5, g722, g723_1, g726, g726le, gif, gsm, gxf, h261, h263, h264, hash, hds, hevc, hls, iamf, ico, ilbc, image2, image2pipe, ipod, ircam, ismv, ivf, jacosub, kvag, latm, lc3, lrc, m4v, matroska, md5, microdvd, mjpeg, mlp, mmf, mov, mp2, mp3, mp4, mpeg, mpeg1video, mpeg2video, mpegts, mpjpeg, mulaw, mxf, mxf_d10, mxf_opatom, null, nut, obu, oga, ogg, ogv, oma, opus, psp, rawvideo, rcwt, rm, roq, rso, rtp, rtp_mpegts, rtsp, s16be, s16le, s24be, s24le, s32be, s32le, s8, sap, sbc, scc, d sdl,sdl2, segment, smjpeg, sox, spdif, spx, srt, streamhash, sup, svcd, swf, tee, truehd, tta, ttml, u16be, u16le, u24be, u24le, u32be, u32le, u8, vc1, vc1test, vcd, vidc, vob, voc, vvc, w64, wav, webm, webm_chunk, webp, webvtt, wsaud, wtv, wv, yuv4mpegpipe")
+    def run(self):
+        if not self.stop_bool:
+            if os.path.exists(self.fileloc) and os.path.isfile(self.fileloc) and self.fileloc[self.fileloc.rindex(".")+1:] in self.extension:
+                if self.app:
+                    self.icon_text.configure(text_color="green")
+                    self.icon_text.set_text("✓")
+                    self.app.file_loc = self.fileloc
+                else:
+                    print("Exists")
+                    # CHECK
+            else:
+                if self.app:
+                    self.icon_text.configure(text_color="red")
+                    self.icon_text.set_text("X")
+                else:
+                    print("Doesnt exists")
+                    # CHECK
+
+    def stop(self):
+        self.stop_bool = True
+
 
 class DownloadThread(threading.Thread):
 
@@ -135,11 +174,11 @@ class DownloadThread(threading.Thread):
             print(e)
     def download(self, mode: str):
         #print(f"Starting {mode}")
-        command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == "audio" else self.video_out} -f {"bestaudio[ext=m4a]" if mode == "audio" else "bestvideo[ext=mp4]" if mode == "Best" else self.quality}".split()
+        command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == 'audio' else self.video_out} -f {'bestaudio[ext=m4a]' if mode == 'audio' else 'bestvideo[ext=mp4]' if mode == 'Best' else self.quality}".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
 
         start_time = time.time_ns()
-        print(f"Starting download {"audio" if mode == "audio" else "video"}")
+        print(f"Starting download {'audio' if mode == 'audio' else 'video'}")
         while True:
             output = self.proc.stdout.readline()
             if (output == '' and self.proc.poll() is not None) or self.stop_bool:
@@ -162,10 +201,10 @@ class DownloadThread(threading.Thread):
                     etaT = Time(str(etat), "S.F")
                     self.eta = etaT.classic()
 
-                    print(f"\rDownloading {"audio" if mode == "audio" else "video"}... {self.perc}%  ETA: {self.eta}", end="")
+                    print(f"\rDownloading {'audio' if mode == 'audio' else 'video'}... {self.perc}%  ETA: {self.eta}", end="")
                     if self.app:
                         self.progress_bar.set(self.perc / 200 + 0.5 * (1 if mode == "audio" else 0))
-                        self.label.set_text(text=f"Downloading {"audio" if mode == "audio" else "video"}... {self.perc}%  ETA: {self.eta}")
+                        self.label.set_text(text=f"Downloading {'audio' if mode == 'audio' else 'video'}... {self.perc}%  ETA: {self.eta}")
 
 
         #self.proc.wait()
@@ -214,7 +253,7 @@ class DownloadThread(threading.Thread):
             os.remove(audio_loc)
             print("\nDone merging")
     def fastdownload(self, quality):
-        command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {"best[ext=mp4]" if quality == "Fast" else "worst[ext=mp4]"}".split()
+        command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {'best[ext=mp4]' if quality == 'Fast' else 'worst[ext=mp4]'}".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=False)
         start_time = time.time_ns()
         print(f"Starting fast download")
@@ -276,7 +315,7 @@ class MyBarLogger(ProgressBarLogger):
             percentage = (value / self.bars[bar]['total']) * 100
             if percentage > 0 and percentage <= 100:
                 if int(percentage) != self.previous_percentage:
-                    ETAs = round((time()-self.time)*(100-percentage)/percentage)
+                    ETAs = round((time.time()-self.time)*(100-percentage)/percentage)
                     ETA = f"{ETAs//3600:02d}:{(ETAs%3600)//60:02d}:{ETAs%60:02d}"
                     self.previous_percentage = int(percentage)
                     self.label_var.set_text(f'Cutting #{self.idx+1}: {round(percentage, 2)}% ; ETA: {ETA}')
@@ -333,7 +372,7 @@ class VideoTrimmer(threading.Thread):
 
     def trim_video(self, start_ins: str | None, end_ins: str | None, idx: int):
         # TODO: block all widgets while cutting
-        self.logger.update_time(time())
+        self.logger.update_time(time.time())
         self.logger.update_idx(idx)
         # Open the video file
         clip = VideoFileClip(self.video_file)

@@ -55,15 +55,24 @@ class Methods(ABC):
     x:float
     y:float
     font: ctk.CTkFont
+    rel_pos: bool
     def abs_place(self):
+        dbg.printfunc()
         self.place(x=round(self.x), y=round(self.y))
     def rel_place(self):
+        dbg.printfunc()
+
         self.place(relx=self.x, rely=self.y, anchor="c")
     def grid_place(self):
+        dbg.printfunc()
+
         self.grid(column=round(self.x), row=round(self.y))
 
     def set_font(self, font:ctk.CTkFont):
+        dbg.printfunc()
         self.configure(font=font)
+    def kplace(self):
+        self.rel_place() if self.rel_pos else self.abs_place()
 
 # TODO: magari aggiungi un metodo che configura sempre l'altezza e la larghezza in base a relative dimension e un metodo place che fa sempre
 #  rel_place() if rel_pos else abs_place()
@@ -443,6 +452,8 @@ class App(ctk.CTk):
     font: ctk.CTkFont = None
     file_loc: str = None
     def __init__(self, dim: tuple[int, int], title: str, *, font: tuple[str, int] = None):
+        # CHECK: usa il main label per mostrare le informazioni "di percorso": piazzalo all'inizio e cambia ciò
+        #  che c'è scritto in base all'operazione scelta
         super().__init__()
         dbg.printfunc()
         self.dim = dim
@@ -498,7 +509,9 @@ REGEX:
         self.popup = PopupManager(self, general_popup_text, [self.popup_button], dim=(300, 240))
 
         self.progress_bar = ProgressBar(self, 0.5, 0.7, width=0.9, relative_position=True, relative_dimension=True)
-        self.label = Label(self, "Starting download ...", 0.5, 0.8, relative_position=True)
+        self.label = Label(self, "Choose an option", 0.5, 0.8, relative_position=True)
+        self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
+
 
         # download gui
         self.link_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter video link...")
@@ -506,20 +519,21 @@ REGEX:
         self.info_id = None
         self.yt_info: list[str] = []
         self.res = None
-        self.icon_text = Label(self, "---", 540, 137, bg_color=self.link_entry.cget("fg_color"))
         self.download_button = Button(self, "Download", 0.8375, 0.225, width=0.25, height=0.05, relative_dimension=True, relative_position=True, command=self.download)#command=lambda: self.print_text_size("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
         self.resolution_menu = OptionMenu(self, [], 0.8375, 0.275, width=0.25, height=0.05, relative_position=True, relative_dimension=True, title="Resolution", command=self.choose_res)
         #self.it.start()
 
         # file gui
         self.file_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
-        self.file_entry.insert(0, "Browse file...")
-        self.file_entry.configure(state="readonly")
+        self.file_entry.bind("<KeyRelease>", self.file_check)
+        self.file_id = None
         self.check_button = Button(self, "Browse", 0.8375, 0.25, width=0.25, height=0.1, relative_dimension=True, relative_position=True, command=self.select_file)
 
         # range gui: start end -> progress in scrollframe; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
         self.scrollframe = ScrollableFrame(self, 0.45, 0.5, width=0.8, height=0.2, relative_position=True, relative_dimension=True)
-
+        self.icon_text = Label(self, "---", 540, 137, bg_color=self.link_entry.cget("fg_color"))
+        self.icon_text.set_font(ctk.CTkFont("Arial", 50))
+        # ERROR: non cambia il font per icon_text
         self.range_values: list[tuple[str | None, str | None]] = []
         self.add_widget()
 
@@ -529,14 +543,17 @@ REGEX:
                 self.link_entry,
                 self.download_button,
                 self.resolution_menu,
-                self.icon_text
+                self.icon_text,
+                "Enter a video link in the entry bar"
                 #self.progress_bar,
                 #self.dwl_label
 
             ],
             "File": [
                 self.file_entry,
-                self.check_button
+                self.check_button,
+                self.icon_text,
+                "Choose a file from your device"
             ]
         }
         # text = self.add_text(str(is_running_in_console()), 10, 10)
@@ -625,10 +642,10 @@ REGEX:
     def select_file(self):
         dbg.printfunc()
         self.file_loc = fd.askopenfilename()
-        self.file_entry.configure(state="normal")
+        #self.file_entry.configure(state="normal")
         self.file_entry.delete(0, ctk.END)
         self.file_entry.insert(0, self.file_loc)
-        self.file_entry.configure(state="readonly")
+        #self.file_entry.configure(state="readonly")
     def cut(self):
         dbg.printfunc()
         if len(self.range_values) == 0 or all(rng == (None, None) for rng in self.range_values):
@@ -641,20 +658,41 @@ REGEX:
         else:
             trm = VideoTrimmer(self, self.progress_bar, self.label, self.file_loc, self.range_values)
             trm.start()
+            self.file_entry.delete(0, ctk.END)
+            self.link_entry.delete(0, ctk.END)
     def get_info(self, event):
-        self.canary = False
+
         if self.info_id is not None:
             self.after_cancel(self.info_id)
         if self.link_entry.get() != "":
-            self.info_id = self.after(500, self.infoThUpd)
+            self.info_id = self.after(500, self.infoThUpd, "Link")
+        else:
+            self.icon_text.set_text("---")
+            self.icon_text.configure(text_color="gray")
+    def file_check(self, event):
+
+        if self.file_id is not None:
+            self.after_cancel(self.file_id)
+        if self.file_entry.get() != "":
+            self.file_id = self.after(50, self.infoThUpd, "File")
         else:
             self.icon_text.set_text("---")
             self.icon_text.configure(text_color="gray")
 
-    def infoThUpd(self):
-        self.canary = True
-        self.it = InfoThread(self.link_entry.get(), self, self.resolution_menu, self.icon_text)
-        self.it.start()
+    def infoThUpd(self, mode: str):
+        if hasattr(self, "it") and self.it.is_alive():
+            print(f"STOP InfoThread: changed {self.it.newlink} to {self.link_entry.get()}")
+            self.it.stop()
+        if mode == "Link":
+            self.it = InfoThread(self.link_entry.get(), self, self.resolution_menu, self.icon_text)
+            self.it.start()
+        elif mode == "File":
+            self.it = FileInfoThread(self.file_entry.get(), self, self.icon_text)
+            self.it.start()
+        else:
+            raise ValueError(f"Error: infoThUpd {mode=} is wrong")
+
+
     def choose_res(self, choice):
         if choice not in ["Best", "Fast", "Fastest"]:
             self.res = self.yt_info[2][choice]
@@ -675,14 +713,24 @@ REGEX:
         dbg.printfunc()
         for spec_GUI in self.gui.values():
             for widget in spec_GUI:
-                widget.place_forget()
-                widget.pack_forget()
-
+                if issubclass(widget.__class__, ctk.CTkBaseClass):
+                    widget.place_forget()
+                    widget.pack_forget()
+        text = f"Use the {choice} tab as indicated"
         for widget in self.gui[choice]:
-            if not widget.rel_pos:
-                widget.abs_place()
+            if isinstance(widget, str):
+                text = widget
+            elif issubclass(widget.__class__, ctk.CTkBaseClass):
+                if not widget.rel_pos:
+                    widget.abs_place()
+                else:
+                    widget.rel_place()
+
             else:
-                widget.rel_place()
+                raise ValueError(f"Error: Widget {widget} class not fitting.")
+        self.label.set_text(text)
+
+
     def print_text_size(self, text: str):
         dbg.printfunc()
         print(self.font.measure(text))
@@ -702,7 +750,6 @@ REGEX:
             asklabel.rel_place() if asklabel.rel_pos else asklabel.abs_place()
             yes.rel_place() if yes.rel_pos else yes.abs_place()
             no.rel_place() if no.rel_pos else no.abs_place()
-            #raise NotImplementedError()
         else:
             self.destroy()
 
@@ -730,9 +777,15 @@ if __name__ == "__main__":
     dbg.printdb("App done")
     app.mainloop()
 
-# TODO: setup wizard + git lfs
+# TODO: setup wizard
 #  aggiungere:
-#  nella sezione file, fai che l'entry di scelta del file è modificabile, e controlla se il file scritto è valido. in caso può essere anche scelto con browse. crea un bottone sotto a browse che è proprio OK, che blocca la entry (fino a che non viene tagliato il video)
-
+#  sistemare il testo in modo che non vada sulla icon_text
+#  nel caso in cui il link del file finisca per .mp4 nella parte di download, basta fare un curl -o. non si possono ottenere le informazioni o altro.
+#  label dell'upgrade
+#  CTRL + Z nelle labels
+#  Invio con file e link download (ma anche le cut entry). per il download del link, forzi subito l'avvio del
+#   infothread, ma se il link non è valido lo segnali nel label generico.
 
 # TODO: aggiungi i requirements.text sia al python App, sia al python CLI
+
+# DOING: n1

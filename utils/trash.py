@@ -86,4 +86,14 @@ cnv.rectangle(50, 50, 100, 200, "#ff0000")
 cnv.rectangle(10, 10, 200, 150, "#00ff00", alpha=.5)
 app.mainloop()
 """
-import os
+
+from Utils import get_text
+with open("exts.txt", "r") as file:
+    lines = file.readlines()
+exts = []
+for l in lines:
+    try:
+        exts.append(get_text(l, ("E", "   ")))
+    except ValueError as e:
+        pass
+print(", ".join(exts))

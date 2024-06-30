@@ -118,7 +118,7 @@ class Time:
         raise NotImplementedError("BRUH")
         # TODO: prendi gli indici e mettici gli indici dei valori
     def classic(self) -> str:
-        return f"{f"{self.hour:02}:" if self.hour != 0 else ""}{f"{self.minutes:02}:" if self.minutes != 0 else ("00:" if self.hour != 0 else "")}{f"{self.seconds:02}" if self.seconds != 0 else "00"}.{round(self.fsecs/pow(10, len(str(self.fsecs))-3)) if self.fsecs != 0 else "0"}"
+        return f"{f'{self.hour:02}:' if self.hour != 0 else ''}{f'{self.minutes:02}:' if self.minutes != 0 else ('00:' if self.hour != 0 else '')}{f'{self.seconds:02}' if self.seconds != 0 else '00'}.{round(self.fsecs/pow(10, len(str(self.fsecs))-3)) if self.fsecs != 0 else '0'}"
     def in_secs(self) -> float:
         return self.hour*3600+self.minutes*60+self.seconds+self.fsecs/pow(10, len(str(self.fsecs)))
 
