@@ -17,6 +17,18 @@ dwl_dir = os.path.join(os.getenv("USERPROFILE"), "Downloads")
 
 dbg = Debugger(False)
 
+
+
+def set_font(parent, font: ctk.CTkFont):
+    dbg.printfunc()
+    for widget in parent.winfo_children():
+        try:
+            widget.set_font(font)
+        except Exception as e:
+            print(f"Cannot set font for {widget}: {e}")
+        if widget.winfo_children():
+            set_font(widget, font)
+
 def bst(font_fam: str, text:str, dim:int, l:int, r:int) -> int:
     dbg.printfunc()
     if l == r-1:
@@ -32,7 +44,7 @@ def get_maximum_font_dim(width: int, height: int, text: str, font: ctk.CTkFont) 
     family: str = font.cget("family")
     min_dim: int = 14
     if font.measure(text) <= width:
-        print("Didnt changed the fot")
+        print("Didn't changed the font")
         return base_dim
     else:
         rows = ctk.CTkFont(family, min_dim).measure(text)//width +1
@@ -74,8 +86,6 @@ class Methods(ABC):
     def kplace(self):
         self.rel_place() if self.rel_pos else self.abs_place()
 
-# TODO: magari aggiungi un metodo che configura sempre l'altezza e la larghezza in base a relative dimension e un metodo place che fa sempre
-#  rel_place() if rel_pos else abs_place()
 
 
 # CTK EXPANSIONS
@@ -188,6 +198,14 @@ class Canvas(ctk.CTkCanvas, Methods):
         self.create_image(round(x), round(y), image=self.images[-1], anchor="nw")
         self.create_rectangle(x, y, width + x, height + y)
 
+    def create_round_consecutive_line(self, points: list[tuple[int, int]], width: int = 1, color: str = "gray", **kwargs):
+        for i in range(1, len(points)):
+            self.create_oval(points[i-1][0]-width/2, points[i-1][1]-width/2, points[i-1][0]+width/2-1, points[i-1][1]+width/2-1, fill=color, outline=color, **kwargs)
+            self.create_line(points[i-1][0], points[i-1][1], points[i][0], points[i][1], fill=color, width=width, **kwargs)
+            self.create_oval(points[i][0]-width/2, points[i][1]-width/2, points[i][0]+width/2-1, points[i][1]+width/2-1, fill=color, outline=color, **kwargs)
+    def ping_animation(self, points: list[tuple[int, int]], width: int = 1, color: str = "gray"):
+        # doing: anim
+        raise NotImplementedError
 
 
 
@@ -281,19 +299,25 @@ class Button(ctk.CTkButton, Methods):
 
 
 class OptionMenu(Methods, ctk.CTkOptionMenu):
-    width:float = 200
+    width: float = 200
     height: float = 40
     x:float
     y:float
     rel_pos:bool
-    def __init__(self, app, values:list[str], x:float, y:float, width: float = 0, height: float = 0, color:str = None, title: str = "Select", command:Callable = None, *, relative_position:bool = False, relative_dimension: bool = False, **kwargs):
+    def __init__(self, app, values:list[str], x:float, y:float, width: float = 0, height: float = 0, color:str = None, title: str = "Select", command:Callable = None, *, relative_position:bool = False, relative_dimension: bool = False, dinamic_width: bool = False, font: ctk.CTkFont = None, **kwargs):
         super().__init__(app, values=values, **kwargs)
         dbg.printfunc()
+        self.dinamic_width = dinamic_width
+        if not font:
+            font = app.font
+        self.font = font
         if relative_dimension:
             width *= app.dim[0]
             height *= app.dim[1]
         if width != 0:
             self.width = width
+        elif dinamic_width:
+            self.set_dinamic_width(values)
         if height != 0:
             self.height = height
         self.configure(width=round(self.width), height=round(self.height))
@@ -310,7 +334,12 @@ class OptionMenu(Methods, ctk.CTkOptionMenu):
         else:
             self.configure(command=self.base_command)
 
-
+    def set_dinamic_width(self, new_vals):
+        try:
+            self.width = 0.45 * max([self.font.measure(val) for val in new_vals]) + 160
+        except ValueError:
+            self.width = 200
+        self.configure(width=round(self.width))
     def set_font(self, font:ctk.CTkFont):
         self.configure(font=font)
         self.configure(dropdown_font=font)
@@ -343,83 +372,32 @@ class ScrollableFrame(Methods, ctk.CTkScrollableFrame):
         self.rel_place() if self.res_pos else self.abs_place()
 
 
-# THREADS
-"""
-class DownloadThread(threading.Thread):
-    def __init__(self, link: str, progress_bar: ProgressBar, app, label: Label = None):
-        super().__init__()
-        dbg.printfunc()
-        self.link = link
-        self.progress_bar = progress_bar
-        self.label = label
-        self.daemon = True
-        self.app = app
-
-    def run(self):
-        dbg.printfunc()
-        ytdl_opts = {
-            'progress_hooks': [self.my_hook],
-            "prefer_player": "ios"
-        }
-        try:
-            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                title = ydl.extract_info(self.link, download=False).get("title", None)
-            title = title.replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
-            self.dwl_loc: str = os.path.join(dwl_dir, title)
-            # ytdl_opts["outtmpl"] = self.dwl_loc
-            self.progress_bar.set(0)
-            self.progress_bar.abs_place() if not self.progress_bar.rel_pos else self.progress_bar.rel_place()
-            if self.label is not None:
-                self.label.abs_place() if not self.label.rel_pos else self.label.rel_place()
-
-            # Download
-            self.what: int = 0
-            tmp_video_path = os.path.join(dwl_dir, "video_tmp.mp4")
-            tmp_audio_path = os.path.join(dwl_dir, "audio_tmp.m4a")
-            # TODO: inserisci la scelta della qualità + cambia il download con un subprocesso che porta yt-dlp
-            ytdl_opts["format"] = "bestvideo"
-            ytdl_opts["outtmpl"] = tmp_video_path
-            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                ydl.download([self.link])
-            self.what = 1
-            ytdl_opts["format"] = "bestaudio"
-            ytdl_opts["outtmpl"] = tmp_audio_path
-            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                ydl.download([self.link])
-            # Merge
-            # subprocess ffmpeg
-
-
-            self.label.set_text(text=f"Video downloaded in {self.dwl_loc}")
-            self.app.file_loc = self.dwl_loc
-            self.progress_bar.place_forget()
-        except yt_dlp.utils.DownloadError as e:
-            self.label.rel_place()
-            self.label.set_text("Error: Connection refused. Check your internet connection")
-    def my_hook(self, d):
-        if d['status'] == 'downloading':
-
-            self.progress_bar.set(float(d['_percent_str'].strip('%'))/200 + 0.5*self.what)
-            self.label.set_text(text=f"Downloading {"video" if self.what == 0 else "audio"}... {d['_percent_str']}  ETA: {d['_eta_str']}")
-"""
-
-
 
 class Popup(ctk.CTkToplevel):
     def __init__(self, app, dim:tuple[int, int], **kwargs):
         super().__init__(app, **kwargs)
         dbg.printfunc()
         self.dim = dim
-        self.font = app.font
-
 
 class PopupManager:
     popup = None
     popup_id = None
-    def __init__(self, app, text:str, widgets: list[ctk.CTkBaseClass], dim:tuple[int, int] = (300,300)):
+    def __init__(self, app, text:str, widgets: list[ctk.CTkBaseClass], dim:tuple[int, int] = None, time: int = 1000, font: ctk.CTkFont = None):
         dbg.printfunc()
         self.app = app
         self.text:str = text
+        self.time = time
+        if not font:
+            font = app.font
+        self.font = font
+
+        # calculate optimal dimensions
+        if not dim:
+            lines = text.split("\n")
+            width = max([self.font.measure(line) for line in lines])+40
+            height = len(lines)*self.font.cget("size")+40
+            dim = (width, height)
+
         self.dim:tuple[int,int] = dim
         for widget in widgets:
             widget.bind("<Enter>", self.show_popup)
@@ -427,15 +405,17 @@ class PopupManager:
 
 
 
+
+
     def show_popup(self, event):
         dbg.printfunc()
-        self.popup_id = self.app.after(1000, self.create_popup, event)
+        self.popup_id = self.app.after(self.time, self.create_popup, event)
     def create_popup(self, event):
         dbg.printfunc()
         self.popup = Popup(self.app, self.dim, fg_color="#3b3b3b")
         self.popup.wm_overrideredirect(True)
-        self.popup.geometry(f"+{event.x_root - (self.popup.cget('width')+10)}+{event.y_root + 10}") if self.dim == (0,0) else self.popup.geometry(f"{self.dim[0]}x{self.dim[1]}+{event.x_root -(self.dim[0]+10)}+{event.y_root +20}")
-        label = ctk.CTkLabel(self.popup, text_color="#e5e5e5", text=self.text, wraplength=self.dim[0]-10)
+        self.popup.geometry(f"{self.dim[0]}x{self.dim[1]}+{event.x_root -(self.dim[0]+10)}+{event.y_root +20}")
+        label = ctk.CTkLabel(self.popup, text_color="#e5e5e5", text=self.text, wraplength=self.dim[0]-10, font=self.font)
         label.place(relx=0.5, rely=0.5, anchor="c")
     def hide_popup(self, event):
         dbg.printfunc()
@@ -451,10 +431,15 @@ class App(ctk.CTk):
     dim: tuple[int, int]
     font: ctk.CTkFont = None
     file_loc: str = None
-    def __init__(self, dim: tuple[int, int], title: str, *, font: tuple[str, int] = None):
+    def __init__(self):
         # CHECK: usa il main label per mostrare le informazioni "di percorso": piazzalo all'inizio e cambia ciò
         #  che c'è scritto in base all'operazione scelta
         super().__init__()
+
+        dim = (800, 600)
+        title = "YTCutter"
+        font = ("Arial", 20)
+
         dbg.printfunc()
         self.dim = dim
         self.geometry(f"{dim[0]}x{dim[1]}")
@@ -469,6 +454,7 @@ class App(ctk.CTk):
         if font is not None:
             self.font = ctk.CTkFont(font[0], font[1])
         ctk.set_default_color_theme("green")
+        ctk.set_appearance_mode("dark")
         dbg.printdb("Set geometry, title and font")
 
         # general gui
@@ -487,7 +473,7 @@ After all of the ranges are set:
 Press "Cut"
 """
 
-        self.parse_popup_text = """
+        self.parse_popup_text = r"""
 How to parse text:
 
 Only seconds:
@@ -500,42 +486,83 @@ Hours:Minutes:Seconds.Milliseconds:
 1:00:23.324 = 3623s.324ms
 
 REGEX:
-^([0-9]{0,2}:)?([0-9]{0,2}:)?([0-9]{0,2})(.[0-9]*)?$
+^(?:(\d+):)?(?:(\d+):)?(\d+)(\.\d+)?$
         """
 
+        # relative positions
+        pad = 0.05
+        blockend = 0.6
+        button_width = 0.25625
+        entry_height = 0.1
+        opt_width = 0.25
+        opt_height = 0.05
+        pop_dim = opt_height * dim[1]
+        icon_width = (entry_height*dim[1]/dim[0])
+        entry_width = 1-2*pad-icon_width-button_width
+        scroll_width = 1-2*pad-button_width+icon_width
+        scroll_height = blockend-(pad+opt_height+3*entry_height)
+        cut_width = 1 - 2*pad - scroll_width - icon_width
+        entry_x = pad + entry_width / 2
+        entry_y = pad+opt_height+3*entry_height/2
+        icon_x = pad+entry_width+icon_width/2
+        button_x = pad+entry_width+icon_width+button_width/2
+        opt_x = button_x-button_width/2-3*icon_width- opt_width/2
+        opt_y = pad+opt_height/2
+        pop_x = opt_x + opt_width/2 + icon_width + opt_height/2
+        scroll_x = pad + scroll_width/2
+        scroll_y = blockend - scroll_height/2
+        cut_x = 1 - pad - cut_width/2
+        progbar_y = 0.7
 
-        self.popup_button = Button(self, "?", 0.9, 0.1, width=dim[0]*0.05, height=dim[0]*0.05, relative_position=True, relative_dimension=False, state="disabled", color="#777777")
+        cnv = Canvas(self, 0, 0, width=dim[0], height=dim[1], background="gray14", highlightcolor="gray14", highlightthickness=0, bd=0)
+        cnv.pack()
+        line_col = "gray"
+        anim_col = "green"
+        line_dim = 6
+        cnv.create_round_consecutive_line([
+            (round((pop_x-opt_height/2-icon_width/2)*dim[0]), round((opt_y-entry_height/2)*dim[1])),
+            (round((pop_x-opt_height/2-icon_width/2)*dim[0]), round((opt_y+entry_height/2+opt_height/2)*dim[1])),
+            (round(icon_x*dim[0]), round((opt_y+entry_height/2+opt_height/2)*dim[1])),
+            (round(icon_x*dim[0]), round((entry_y+entry_height)*dim[1])),
+            (round((cut_x-cut_width/2-icon_width/2)*dim[0]), round((entry_y+entry_height)*dim[1])),
+            (round((cut_x-cut_width/2-icon_width/2)*dim[0]), round((progbar_y-entry_height/2)*dim[1]))
+        ], width=line_dim, color=line_col)
+
+        self.popup_button = Button(self, "?", pop_x, opt_y, width=pop_dim, height=pop_dim, relative_position=True, relative_dimension=False, state="disabled", color="#777777")
         self.popup_button.rel_place() if self.popup_button.rel_pos else self.popup_button.abs_place()
-        self.popup = PopupManager(self, general_popup_text, [self.popup_button], dim=(300, 240))
+        PopupManager(self, general_popup_text, [self.popup_button], time=100)
 
-        self.progress_bar = ProgressBar(self, 0.5, 0.7, width=0.9, relative_position=True, relative_dimension=True)
+
+
+        self.progress_bar = ProgressBar(self, 0.5, progbar_y, width=0.9, relative_position=True, relative_dimension=True)
+        self.progress_bar.rel_place()
         self.label = Label(self, "Choose an option", 0.5, 0.8, relative_position=True)
         self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
 
 
         # download gui
-        self.link_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter video link...")
+        self.link_entry = Entry(self, entry_x, entry_y, width=entry_width, height=entry_height, relative_position=True, relative_dimension=True, bg_text="Enter video link...")
         self.link_entry.bind("<KeyRelease>", self.get_info)
         self.info_id = None
         self.yt_info: list[str] = []
         self.res = None
-        self.download_button = Button(self, "Download", 0.8375, 0.225, width=0.25, height=0.05, relative_dimension=True, relative_position=True, command=self.download)#command=lambda: self.print_text_size("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
-        self.resolution_menu = OptionMenu(self, [], 0.8375, 0.275, width=0.25, height=0.05, relative_position=True, relative_dimension=True, title="Resolution", command=self.choose_res)
-        #self.it.start()
+        self.download_button = Button(self, "Download", button_x, entry_y-entry_height/4, width=button_width+2/dim[0], height=entry_height/2, relative_dimension=True, relative_position=True, command=self.download, border_color=self.cget("fg_color"), border_width=1)
+        self.resolution_menu = OptionMenu(self, [], button_x, entry_y+entry_height/4, width=button_width, height=entry_height/2, relative_position=True, relative_dimension=True, title="Resolution", command=self.choose_res)
 
         # file gui
-        self.file_entry = Entry(self, 0.3775, 0.25, width=0.68, height=0.1, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
+        self.file_entry = Entry(self, entry_x, entry_y, width=entry_width, height=entry_height, relative_position=True, relative_dimension=True, bg_text="Enter local video file...")
         self.file_entry.bind("<KeyRelease>", self.file_check)
         self.file_id = None
-        self.check_button = Button(self, "Browse", 0.8375, 0.25, width=0.25, height=0.1, relative_dimension=True, relative_position=True, command=self.select_file)
+        self.check_button = Button(self, "Browse", button_x, entry_y, width=button_width, height=entry_height, relative_dimension=True, relative_position=True, command=self.select_file)
 
         # range gui: start end -> progress in scrollframe; progress bar will be a sum of n (#ranges) progress bar, all initialized like in trash.py
-        self.scrollframe = ScrollableFrame(self, 0.45, 0.5, width=0.8, height=0.2, relative_position=True, relative_dimension=True)
-        self.icon_text = Label(self, "---", 540, 137, bg_color=self.link_entry.cget("fg_color"))
-        self.icon_text.set_font(ctk.CTkFont("Arial", 50))
-        # ERROR: non cambia il font per icon_text
+        self.scrollframe = ScrollableFrame(self, scroll_x-6/dim[0], scroll_y, width=scroll_width-18/dim[0], height=scroll_height-12/dim[1], relative_position=True, relative_dimension=True, fg_color="gray14")
+        self.icon_text = Label(self, "---", icon_x, entry_y, relative_position=True)
         self.range_values: list[tuple[str | None, str | None]] = []
         self.add_widget()
+
+        # fr = ctk.CTkFrame(self, width=round(icon_width*dim[0]), height=round(scroll_height*dim[1]), fg_color="red")
+        # fr.place(relx=scroll_x+scroll_width/2+icon_width/2, rely=scroll_y, anchor="c")
 
 
         self.gui = {
@@ -558,7 +585,7 @@ REGEX:
         }
         # text = self.add_text(str(is_running_in_console()), 10, 10)
 
-        self.optionMenu = OptionMenu(self, list(self.gui.keys()), 0.5, 0.1, relative_position=True, command=self.set_gui_on_change)
+        self.optionMenu = OptionMenu(self, list(self.gui.keys()), opt_x, opt_y, width=opt_width, height=pad, relative_position=True, relative_dimension=True, command=self.set_gui_on_change)
         self.optionMenu.abs_place() if not self.optionMenu.rel_pos else self.optionMenu.rel_place()
 
 
@@ -566,13 +593,17 @@ REGEX:
 
         #self.checkbox = self.add_optionmenu(list(self.gui.keys()), 0.5, 0.1, 1, relative_position=True, relative_dimensions=True, command=self.set_gui_on_change, color="red")
         #self.after(100, self.adjust, 600)
-        self.cut_button = Button(self, "Cut", 0.9325, 0.5, width=0.1, height=0.22, relative_position=True, relative_dimension=True, command=self.cut)
+        self.cut_button = Button(self, "Cut", cut_x, scroll_y, width=cut_width, height=scroll_height, relative_position=True, relative_dimension=True, command=self.cut)
         self.cut_button.rel_place()
         if font:
-            self.set_font(self, self.font)
+            set_font(self, self.font)
+        self.icon_text.set_font(ctk.CTkFont("Arial", 30))
+
 
         dbg.printdb("Ended creating app")
         return
+
+
     def add_widget(self, orig_button: Button = None, start_link: Entry = None, end_link: Entry = None):
         dbg.printfunc()
         if orig_button is None:
@@ -581,7 +612,7 @@ REGEX:
         else:
             self.row = orig_button.y +1
         dim = self.scrollframe.cget("width")//10
-        height = 35
+        height = 40
         new_start = Entry(self.scrollframe, 0, self.row, width=dim*4, height=height, bg_text="Cut start...")
         new_start.configure(corner_radius=0, font=self.font)
         new_start.grid(column=new_start.x, row=new_start.y)
@@ -592,7 +623,7 @@ REGEX:
         new_add.configure(corner_radius=0, font=self.font)
         new_add.grid(column=new_add.x, row=new_add.y)
         new_add.configure(command=lambda: self.add_widget(new_add, new_start, new_end))
-        PopupManager(self, self.parse_popup_text, [new_start, new_end], dim=(220, 200))
+        PopupManager(self, self.parse_popup_text, [new_start, new_end], time=1000)
         if orig_button is not None:
             orig_button.configure(fg_color=("#911f1f"), text="-", command=lambda: self.remove_widgets(self.scrollframe,orig_button.y), hover_color="#cc2d2d")
             start = start_link.get() if start_link.get() != "" else None
@@ -691,6 +722,7 @@ REGEX:
             self.it.start()
         else:
             raise ValueError(f"Error: infoThUpd {mode=} is wrong")
+        # ERROR: il thread non si interrompe se entry è vuoto
 
 
     def choose_res(self, choice):
@@ -699,15 +731,7 @@ REGEX:
         else:
             self.res = choice
 
-    def set_font(self, parent, font: ctk.CTkFont):
-        dbg.printfunc()
-        for widget in parent.winfo_children():
-            try:
-                widget.set_font(font)
-            except Exception as e:
-                print(f"Cannot set font for {widget}: {e}")
-            if widget.winfo_children():
-                self.set_font(widget, font)
+
 
     def set_gui_on_change(self, choice):
         dbg.printfunc()
@@ -746,7 +770,7 @@ REGEX:
                          color="#00aa00", command=lambda: self.choose(True), hover_color="#00d100")
             no = Button(self.askframe, "NO", .75, .6, width=.4, height=.2, relative_dimension=True, relative_position=True,
                         color="#aa0000", command=lambda: self.choose(False), hover_color="#d10000")
-            self.set_font(self.askframe, self.font)
+            set_font(self.askframe, self.font)
             asklabel.rel_place() if asklabel.rel_pos else asklabel.abs_place()
             yes.rel_place() if yes.rel_pos else yes.abs_place()
             no.rel_place() if no.rel_pos else no.abs_place()
@@ -773,19 +797,21 @@ REGEX:
 if __name__ == "__main__":
     assert os.path.exists("..\\..\\utils\\ico\\download.ico")
     dbg.printdb("Started program")
-    app = App((800, 600), "YTCutter", font=("Arial", 20))
+    app = App()
     dbg.printdb("App done")
     app.mainloop()
 
 # TODO: setup wizard
 #  aggiungere:
-#  sistemare il testo in modo che non vada sulla icon_text
-#  nel caso in cui il link del file finisca per .mp4 nella parte di download, basta fare un curl -o. non si possono ottenere le informazioni o altro.
+#  sistema il popup di chiusura (magari con un'animazione)
+#  il label generale deve cambiare a seconda degli errori
+#  nel caso in cui il link del file finisca per .mp4 nella parte di download, basta fare un curl -o. non si possono ottenere le informazioni
+#   o altro.
 #  label dell'upgrade
-#  CTRL + Z nelle labels
+#  CTRL + Z nelle labels, CTRL + Altro non fa eseguire il comando
 #  Invio con file e link download (ma anche le cut entry). per il download del link, forzi subito l'avvio del
 #   infothread, ma se il link non è valido lo segnali nel label generico.
+#  aggiungi i requirements.text sia al python App, sia al python CLI
+#  in una nuova versione, magari, aggiungi il modo di scaricare un video direttamente in clip
 
-# TODO: aggiungi i requirements.text sia al python App, sia al python CLI
-
-# DOING: n1
+# DOING: sistemare la distanza del bottone cut

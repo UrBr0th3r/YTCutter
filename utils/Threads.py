@@ -58,6 +58,7 @@ class InfoThread(threading.Thread):
                 if self.app:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
+                    # TODO: aggiungi l'errore al label
                 print(f"Errori:\n{stderr}")
             else:
                 try:
@@ -80,6 +81,9 @@ class InfoThread(threading.Thread):
                         self.option_select.set("Resolution")
                         self.option_select.configure(values=list(self.resolutions.keys())+["Best","Fast","Fastest"])
                         self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
+                        if self.option_select.dinamic_width:
+                            self.option_select.set_dinamic_width(list(self.resolutions.keys())+["Best","Fast","Fastest"])
+
     def changelink(self, link):
         print("Changed link to "+link)
         self.newlink = link
@@ -350,7 +354,7 @@ class VideoTrimmer(threading.Thread):
     @classmethod
     def parse_time(cls, time_piece):
 
-        pattern = re.compile(r'^(?:(\d{1,2}):)?(?:(\d{1,2}):)?(\d{1,2})(\.\d+)?$')
+        pattern = re.compile(r'^(?:(\d+):)?(?:(\d+):)?(\d+)(\.\d+)?$')
         match = pattern.match(time_piece)
         if match:
             hours = match.group(1)
@@ -388,23 +392,24 @@ class VideoTrimmer(threading.Thread):
 
 
             # Trim the video
-            trimmed_clip = clip.subclip(start_time, end_time)
+            if start_ins and end_ins:
+                trimmed_clip = clip.subclip(start_time, end_time)
 
-            # Write the trimmed video to a new file
-            title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins if start_ins else 'Start'}-{end_ins if end_ins else 'End'}].mp4"
-            self.logger.update_name(title)
-            self.label.set_text("Starting to cut...")
-            self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
-            self.progress_bar.set(0)
-            self.progress_bar.rel_place() if self.progress_bar.rel_pos else self.progress_bar.abs_place()
+                # Write the trimmed video to a new file
+                title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins if start_ins else 'Start'}-{end_ins if end_ins else 'End'}].mp4"
+                self.logger.update_name(title)
+                self.label.set_text("Starting to cut...")
+                self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
+                self.progress_bar.set(0)
+                self.progress_bar.rel_place() if self.progress_bar.rel_pos else self.progress_bar.abs_place()
 
-            trimmed_clip.write_videofile(title, logger=self.logger)
+                trimmed_clip.write_videofile(title, logger=self.logger)
 
-            # Close the video file
-            trimmed_clip.close()
-            self.label.set_text(f"Cut #{idx + 1} saved in: {title}")
+                # Close the video file
+                trimmed_clip.close()
+                self.label.set_text(f"Cut #{idx + 1} saved in: {title}")
 
-            #self.label.set_text(f"Cut #{idx+1}: Saved in {title}")
+                #self.label.set_text(f"Cut #{idx+1}: Saved in {title}")
         except ValueError as e:
             self.label.set_text(f"Error: {str(e)}")
             self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
@@ -439,7 +444,7 @@ if __name__ == "__main__":
     dwl.stop()"""
 
 
-    #print(VideoTrimmer.parse_time("22:1.45"))
+    print(VideoTrimmer.parse_time("22:1.45"))
     # TODO: cambia Utils.Time con delle regex
 
     # print(dt.title)
