@@ -813,5 +813,3 @@ if __name__ == "__main__":
 #   infothread, ma se il link non è valido lo segnali nel label generico.
 #  aggiungi i requirements.text sia al python App, sia al python CLI
 #  in una nuova versione, magari, aggiungi il modo di scaricare un video direttamente in clip
-
-# DOING: sistemare la distanza del bottone cut
