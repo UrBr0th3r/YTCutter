@@ -1,5 +1,7 @@
 # YTCutter
 
+## STILL W.I.P.
+
 ### Python application that downloads videos *(and cuts them if necessary)*
 
 /bin and /utils contain ffmpeg and yt-dlp executables and utilities, so they are necessary.
