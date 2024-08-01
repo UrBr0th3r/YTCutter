@@ -1,6 +1,14 @@
 import re, string, inspect
 def get_text(phrase: str, to_search: tuple[str | None, str | None]):
-    return phrase[(phrase.index(to_search[0])+ len(to_search[0]) if to_search[0] else 0) : (phrase.index(to_search[1]) if to_search[1] else len(phrase))].strip(" ")
+    try:
+        stidx = phrase.index(to_search[0])+ len(to_search[0]) if to_search[0] else 0
+    except ValueError:
+        stidx = 0
+    try:
+        enidx = phrase.index(to_search[1]) if to_search[1] else len(phrase)
+    except ValueError:
+        enidx = len(phrase)
+    return phrase[stidx : enidx].strip(" ")
 
 
 class Time:
@@ -43,7 +51,7 @@ class Time:
         match = re.match(pattern, time)
     
         if not match:
-            raise ValueError("Bad time (or format)")
+            raise ValueError(f"Bad time (or format). With pattern: {pattern}, you searched in {time}")
     
         self.hour = ""
         self.minutes = ""

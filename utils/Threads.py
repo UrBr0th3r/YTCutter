@@ -1,6 +1,7 @@
 from moviepy.editor import VideoFileClip
 from proglog import ProgressBarLogger
 from time import time, sleep
+from datetime import datetime
 
 import sys
 import threading
@@ -16,21 +17,23 @@ import re
 yt_dlp_loc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "yt-dlp.exe")
 ffmpeg_loc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "ffmpeg.exe")
 
+EXTENSIONS = ("3g2", "3gp", "a64", "ac3", "ac4", "adts", "adx", "aea", "aiff", "alaw", "alp", "amr", "amv", "apm", "apng", "aptx", "aptx_hd", "argo_asf", "argo_cvg", "asf", "asf_stream", "ass", "ast", "au", "avi", "avif", "avm2", "avs2", "avs3", "bit", "d caca", "caf", "cavsvideo", "chromaprint", "codec2", "codec2raw", "crc", "dash", "data", "daud", "dfpwm", "dirac", "dnxhd", "dts", "dv", "dvd", "eac3", "evc", "f32be", "f32le", "f4v", "f64be", "f64le", "ffmetadata", "fifo", "film_cpk", "filmstrip", "fits", "flac", "flv", "framecrc", "framehash", "framemd5", "g722", "g723_1", "g726", "g726le", "gif", "gsm", "gxf", "h261", "h263", "h264", "hash", "hds", "hevc", "hls", "iamf", "ico", "ilbc", "image2", "image2pipe", "ipod", "ircam", "ismv", "ivf", "jacosub", "kvag", "latm", "lc3", "lrc", "m4v", "matroska", "md5", "microdvd", "mjpeg", "mlp", "mmf", "mov", "mp2", "mp3", "mp4", "mpeg", "mpeg1video", "mpeg2video", "mpegts", "mpjpeg", "mulaw", "mxf", "mxf_d10", "mxf_opatom", "null", "nut", "obu", "oga", "ogg", "ogv", "oma", "opus", "psp", "rawvideo", "rcwt", "rm", "roq", "rso", "rtp", "rtp_mpegts", "rtsp", "s16be", "s16le", "s24be", "s24le", "s32be", "s32le", "s8", "sap", "sbc", "scc", "d sdl", "sdl2", "segment", "smjpeg", "sox", "spdif", "spx", "srt", "streamhash", "sup", "svcd", "swf", "tee", "truehd", "tta", "ttml", "u16be", "u16le", "u24be", "u24le", "u32be", "u32le", "u8", "vc1", "vc1test", "vcd", "vidc", "vob", "voc", "vvc", "w64", "wav", "webm", "webm_chunk", "webp", "webvtt", "wsaud", "wtv", "wv", "yuv4mpegpipe")
 if not os.path.exists(yt_dlp_loc) or not os.path.exists(ffmpeg_loc):
+    print("Cant find executable files")
     messagebox.showerror("ALERT", "Can't find all executable files!\nPlease, check if bin dir is on your utils directory")
     sys.exit(1)
 
 class InfoThread(threading.Thread):
     title: str
     resolutions: dict[str, str]
-    duration: str
+    duration: str | None
     app = None
     option_select = None
     def __init__(self, link:str, app = None, option_select = None, icon_text = None):
         super().__init__()
         self.newlink = link
         self.icon_text = icon_text
-        #self.daemon = True
+        self.daemon = True
         self.running = True
         if app:
             self.app = app
@@ -54,32 +57,41 @@ class InfoThread(threading.Thread):
         print(self.newlink, self.stop_bool)
         if not self.stop_bool:
             # CANARY
-            if stderr:
+            if stderr and any("ERROR" in errs for errs in stderr.split("\n")):
                 if self.app:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
-                    # TODO: aggiungi l'errore al label
-                print(f"Errori:\n{stderr}")
+                    self.app.label.set_text(f"Error: {get_text(stderr, ("]", "."))}")
+                print(f"Errors:\n{stderr}")
             else:
                 try:
                     js = json.loads(stdout)
                 except json.decoder.JSONDecodeError as e:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
+                    self.app.label.set_text("Error in loading infos")
                 else:
                     if self.app:
                         self.icon_text.configure(text_color="green")
                         self.icon_text.set_text("✓")
-                    self.title = js.get("title", "video_scaricato").replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
-                    self.resolutions = {f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "mp4"}
+                        self.app.label.set_text("URL exists and it is accessible")
+                    self.title = js.get("title", "downloaded_video").replace(" ", "_").translate(str.maketrans("","", string.punctuation.replace("_", "")))+".mp4"
+                    self.resolutions = {"Fixed":"Fixed"} if any(el.endswith(f".{ext}") for el in self.newlink.split("&") for ext in EXTENSIONS) else {f.get("resolution"): f.get("format_id") for f in js.get("formats", []) if f["ext"] == "mp4"}
+
                     if ("audio only" in self.resolutions.keys()):
                         self.resolutions.pop("audio only")
-                    self.duration = str(float(js.get("duration")))
+                    try:
+                        self.duration = str(float(js.get("duration")))
+                    except (TypeError, ValueError):
+                        self.duration = None
                     print(self.title, self.resolutions, self.duration)
                     if self.app:
                         self.app.yt_info = [self.title, self.duration, self.resolutions]
-                        self.option_select.set("Resolution")
-                        self.option_select.configure(values=list(self.resolutions.keys())+["Best","Fast","Fastest"])
+                        if "Fixed" in self.resolutions.keys():
+                            self.option_select.set("Fixed")
+                        else:
+                            self.option_select.set("Resolution")
+                            self.option_select.configure(values=list(self.resolutions.keys())+["Best","Fast","Fastest"])
                         self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
                         if self.option_select.dinamic_width:
                             self.option_select.set_dinamic_width(list(self.resolutions.keys())+["Best","Fast","Fastest"])
@@ -105,13 +117,13 @@ class FileInfoThread(threading.Thread):
         self.icon_text = icon_text
         self.stop_bool = False
         self.daemon = True
-        self.extension = ("3g2, 3gp, a64, ac3, ac4, adts, adx, aea, aiff, alaw, alp, amr, amv, apm, apng, aptx, aptx_hd, argo_asf, argo_cvg, asf, asf_stream, ass, ast, au, avi, avif, avm2, avs2, avs3, bit, d caca, caf, cavsvideo, chromaprint, codec2, codec2raw, crc, dash, data, daud, dfpwm, dirac, dnxhd, dts, dv, dvd, eac3, evc, f32be, f32le, f4v, f64be, f64le, ffmetadata, fifo, film_cpk, filmstrip, fits, flac, flv, framecrc, framehash, framemd5, g722, g723_1, g726, g726le, gif, gsm, gxf, h261, h263, h264, hash, hds, hevc, hls, iamf, ico, ilbc, image2, image2pipe, ipod, ircam, ismv, ivf, jacosub, kvag, latm, lc3, lrc, m4v, matroska, md5, microdvd, mjpeg, mlp, mmf, mov, mp2, mp3, mp4, mpeg, mpeg1video, mpeg2video, mpegts, mpjpeg, mulaw, mxf, mxf_d10, mxf_opatom, null, nut, obu, oga, ogg, ogv, oma, opus, psp, rawvideo, rcwt, rm, roq, rso, rtp, rtp_mpegts, rtsp, s16be, s16le, s24be, s24le, s32be, s32le, s8, sap, sbc, scc, d sdl,sdl2, segment, smjpeg, sox, spdif, spx, srt, streamhash, sup, svcd, swf, tee, truehd, tta, ttml, u16be, u16le, u24be, u24le, u32be, u32le, u8, vc1, vc1test, vcd, vidc, vob, voc, vvc, w64, wav, webm, webm_chunk, webp, webvtt, wsaud, wtv, wv, yuv4mpegpipe")
     def run(self):
         if not self.stop_bool:
-            if os.path.exists(self.fileloc) and os.path.isfile(self.fileloc) and self.fileloc[self.fileloc.rindex(".")+1:] in self.extension:
+            if os.path.exists(self.fileloc) and os.path.isfile(self.fileloc) and self.fileloc[self.fileloc.rindex(".")+1:] in EXTENSIONS:
                 if self.app:
                     self.icon_text.configure(text_color="green")
                     self.icon_text.set_text("✓")
+                    self.app.label.set_text("File exists")
                     self.app.file_loc = self.fileloc
                 else:
                     print("Exists")
@@ -120,13 +132,13 @@ class FileInfoThread(threading.Thread):
                 if self.app:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
+                    self.app.label.set_text("File does not exists" if self.fileloc[self.fileloc.rindex(".")+1:] in EXTENSIONS else "File with wrong extension")
                 else:
                     print("Doesnt exists")
                     # CHECK
 
     def stop(self):
         self.stop_bool = True
-
 
 class DownloadThread(threading.Thread):
 
@@ -157,11 +169,12 @@ class DownloadThread(threading.Thread):
                 self.progress_bar.set(0)
                 self.progress_bar.abs_place() if not self.progress_bar.rel_pos else self.progress_bar.rel_place()
                 self.label.set_text("Starting download ...")
+                self.app.download_button.configure(state="disabled", fg_color="gray")
                 self.label.abs_place() if not self.label.rel_pos else self.label.rel_place()
 
             #print("RUN")
             #print(self.quality)
-            if self.quality != "Fast" and self.quality != "Fastest":
+            if self.quality != "Fast" and self.quality != "Fastest" and self.quality != "Fixed":
                 #print("Quality !")
                 self.download(self.quality)
                 self.download("audio")
@@ -174,8 +187,12 @@ class DownloadThread(threading.Thread):
                 if self.app:
                     self.progress_bar.set(1)
                     self.label.set_text(f"Video downloaded in {self.output_loc}")
+                    self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
+                os.utime(self.output_loc, (datetime.now().timestamp(), datetime.now().timestamp()))
+
         except Exception as e:
             print(e)
+            self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
     def download(self, mode: str):
         #print(f"Starting {mode}")
         command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == 'audio' else self.video_out} -f {'bestaudio[ext=m4a]' if mode == 'audio' else 'bestvideo[ext=mp4]' if mode == 'Best' else self.quality}".split()
@@ -188,11 +205,10 @@ class DownloadThread(threading.Thread):
             if (output == '' and self.proc.poll() is not None) or self.stop_bool:
                 break
             if "ERROR" in output:
-                print(output)
                 if self.app:
                     self.progress_bar.set(0)
                     self.label.set_text(text=output)
-                    break
+                raise ConnectionRefusedError(output)
             if output:
                 if "%" in output.strip():
                     #print(output.strip())
@@ -215,7 +231,7 @@ class DownloadThread(threading.Thread):
         if not self.stop_bool:
             print(f"\nDone downloading {mode}")
     def merge(self, video_loc:str, audio_loc:str):
-        command = f"{ffmpeg_loc} -i {video_loc} -i {audio_loc} {self.output_loc} -c:v copy -c:a copy -qscale 0 -y"  # .split()
+        command = f"{ffmpeg_loc} -i {video_loc} -i {audio_loc} {self.output_loc} -c:v copy -c:a copy -qscale 0 -y".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         print("Start merging")
         start_time = time.time_ns()
@@ -223,26 +239,33 @@ class DownloadThread(threading.Thread):
         if not self.stop_bool:
             for line in output:
                 if "time=" in line:
-                    done = get_text(line, ("time=", "bitrate"))
-                    total = self.duration
-                    doneT = Time(done, "hh:mm:ss.F")
-                    totalT = Time(total, "S.F")
-                    dones = doneT.in_secs()
-                    totals = totalT.in_secs()
-                    self.perc = round((dones * 100 / totals), 2)
-                    if self.perc < 0:
-                        self.perc = 0.0
-                    if self.perc > 100:
-                        self.perc = 100
-                    ns = time.time_ns() - start_time
-                    etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
-                    if etat < 0:
-                        etat = 0.0
-                    try:
-                        etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
-                    except ValueError:
-                        etaT = Time("0", "S")
-                    self.eta = etaT.classic()
+                    if self.duration:
+                        done = get_text(line, ("time=", "bitrate"))
+                        total = self.duration
+                        try:
+                            doneT = Time(done, "hh:mm:ss.F")
+                            totalT = Time(total, "S.F")
+                        except ValueError:
+                            doneT = Time("1", "s")
+                            totalT = Time("1", "s")
+                        dones = doneT.in_secs()
+                        totals = totalT.in_secs()
+                        self.perc = round((dones * 100 / totals), 2)
+                        if self.perc < 0:
+                            self.perc = 0.0
+                        if self.perc > 100:
+                            self.perc = 100
+                        ns = time.time_ns() - start_time
+                        etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
+                        if etat < 0:
+                            etat = 0.0
+                        try:
+                            etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
+                        except ValueError:
+                            etaT = Time("0", "S")
+                        self.eta = etaT.classic()
+                    else:
+                        self.eta = "Unknown"
                     print(f"\rMerging... {self.perc}%  ETA: {self.eta}", end="")
                     if self.app:
                         self.progress_bar.set(self.perc / 100)
@@ -257,15 +280,24 @@ class DownloadThread(threading.Thread):
             os.remove(audio_loc)
             print("\nDone merging")
     def fastdownload(self, quality):
-        command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {'best[ext=mp4]' if quality == 'Fast' else 'worst[ext=mp4]'}".split()
-        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=False)
+        if quality != "Fixed":
+            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {'best[ext=mp4]' if quality == 'Fast' else 'worst[ext=mp4]'}".split()
+        else:
+            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc}".split()
+        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
         start_time = time.time_ns()
         print(f"Starting fast download")
+        print(' '.join(command))
 
         while True:
             output = self.proc.stdout.readline()
             if (output == '' and self.proc.poll() is not None) or self.stop_bool:
                 break
+            if "ERROR" in output:
+                if self.app:
+                    self.progress_bar.set(0)
+                    self.label.set_text(text=output)
+                raise ConnectionRefusedError(f"{output}")
             if output:
                 if "%" in output.strip():
                     # print(output.strip())
@@ -282,7 +314,9 @@ class DownloadThread(threading.Thread):
                         self.progress_bar.set(self.perc / 100)
                         self.label.set_text(text=f"Downloading video... {self.perc}%  ETA: {self.eta}")
         if not self.stop_bool:
-            print("Done fast downloading")
+            print("\nDone fast downloading")
+
+
     def stop(self):
         try:
             self.proc.kill()
@@ -340,6 +374,8 @@ class VideoTrimmer(threading.Thread):
         self.logger = MyBarLogger(self.master, self.progress_bar, self.label)
 
     def run(self) -> None:
+        self.master.download_button.configure(state="disabled", fg_color="gray")
+        self.master.cut_button.configure(state="disabled", fg_color="gray")
         for rngIdx in range(len(self.range_values)):
 
             self.trim_video(self.range_values[rngIdx][0], self.range_values[rngIdx][1], rngIdx)
@@ -350,6 +386,8 @@ class VideoTrimmer(threading.Thread):
             except IndexError:
                 pass
         self.master.add_widget()
+        self.master.download_button.configure(state="normal", fg_color=self.master.check_button.cget("fg_color"))
+        self.master.cut_button.configure(state="normal", fg_color=self.master.check_button.cget("fg_color"))
 
     @classmethod
     def parse_time(cls, time_piece):
@@ -375,7 +413,6 @@ class VideoTrimmer(threading.Thread):
 
 
     def trim_video(self, start_ins: str | None, end_ins: str | None, idx: int):
-        # TODO: block all widgets while cutting
         self.logger.update_time(time.time())
         self.logger.update_idx(idx)
         # Open the video file
@@ -446,7 +483,7 @@ if __name__ == "__main__":
 
     print(VideoTrimmer.parse_time("22:1.45"))
     # TODO: cambia Utils.Time con delle regex
-
+    # DOING: prendi info su un file .mp4 esterno, e poi fai anche il download di .mp4 esterno (curl)
     # print(dt.title)
 
 
