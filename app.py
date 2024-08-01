@@ -75,7 +75,7 @@ class InfoThread(threading.Thread):
                 if self.app:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
-                    self.app.label.set_text(f"Error: {get_text(stderr, ("]", "."))}")
+                    self.app.label.set_text(f"Error: {get_text(stderr, (']', '.'))}")
                 print(f"Errors:\n{stderr}")
             else:
                 try:
@@ -499,7 +499,7 @@ class VideoTrimmer(threading.Thread):
                 #trimmed_clip = clip.subclip(start_time, end_time)
                 # fai partire il comando dal Popen
                 # Write the trimmed video to a new file
-                title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins.replace(":",".") if start_ins else 'Start'}-{end_ins.replace(":","." ) if end_ins else 'End'}].mp4"
+                title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins.replace(':','.') if start_ins else 'Start'}-{end_ins.replace(':','.') if end_ins else 'End'}].mp4"
 
                 self.logger.update_name(title)
                 self.label.set_text("Starting to cut...")

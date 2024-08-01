@@ -61,7 +61,7 @@ class InfoThread(threading.Thread):
                 if self.app:
                     self.icon_text.configure(text_color="red")
                     self.icon_text.set_text("X")
-                    self.app.label.set_text(f"Error: {get_text(stderr, ("]", "."))}")
+                    self.app.label.set_text(f"Error: {get_text(stderr, (']', '.'))}")
                 print(f"Errors:\n{stderr}")
             else:
                 try:
