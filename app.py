@@ -499,7 +499,7 @@ class VideoTrimmer(threading.Thread):
                 #trimmed_clip = clip.subclip(start_time, end_time)
                 # fai partire il comando dal Popen
                 # Write the trimmed video to a new file
-                title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins if start_ins else 'Start'}-{end_ins if end_ins else 'End'}].mp4"
+                title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins.replace(":",".") if start_ins else 'Start'}-{end_ins.replace(":","." ) if end_ins else 'End'}].mp4"
 
                 self.logger.update_name(title)
                 self.label.set_text("Starting to cut...")
