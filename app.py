@@ -11,8 +11,6 @@ import math
 
 import string, inspect
 
-from moviepy.editor import VideoFileClip
-from proglog import ProgressBarLogger
 from time import time, sleep
 from datetime import datetime
 
