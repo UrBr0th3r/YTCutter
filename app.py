@@ -139,6 +139,7 @@ class FileInfoThread(threading.Thread):
                     self.icon_text.set_text("✓")
                     self.app.label.set_text("File exists")
                     self.app.file_loc = self.fileloc
+                    # DOING: add command: ffmpeg.exe -i video -f null - con stderr in pipe, e stdout in devnull.
                 else:
                     print("Exists")
                     # CHECK
@@ -200,7 +201,6 @@ class DownloadThread(threading.Thread):
                 print(f"Video downloaded in {self.output_loc}")
                 if self.app:
                     self.app.file_loc = self.output_loc
-                    self.app.duration = self.duration
                     self.progress_bar.set(1)
                     self.label.set_text(f"Video downloaded in {self.output_loc}")
                     self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
@@ -254,13 +254,15 @@ class DownloadThread(threading.Thread):
         output = self.proc.stdout
         if not self.stop_bool:
             for line in output:
+                if "Duration:" in line:
+                    self.duration = get_text(line, ("Duration: ", ", start:"))
                 if "time=" in line:
                     if self.duration:
                         done = get_text(line, ("time=", "bitrate"))
                         total = self.duration
                         try:
                             doneT = Time(done, "hh:mm:ss.F")
-                            totalT = Time(total, "S.F")
+                            totalT = Time(total, "hh:mm:ss.F")
                         except ValueError:
                             doneT = Time("1", "s")
                             totalT = Time("1", "s")
@@ -387,6 +389,8 @@ class VideoTrimmer(threading.Thread):
         self.daemon = True
         self.range_values = ranges
         self.logger = MyBarLogger(self.master, self.progress_bar, self.label)
+        self.stop_bool = False
+        self.duration = None
 
     def run(self) -> None:
         self.master.download_button.configure(state="disabled", fg_color="gray")
@@ -428,59 +432,8 @@ class VideoTrimmer(threading.Thread):
 
 
     def trim_video(self, start_ins: str | None, end_ins: str | None, idx: int):
-        """
-        command = f"{ffmpeg_loc} -i {video_loc} -i {audio_loc} {self.output_loc} -c:v copy -c:a copy -qscale 0 -y".split()
-        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        print("Start merging")
-        start_time = time.time_ns()
-        output = self.proc.stdout
-        if not self.stop_bool:
-            for line in output:
-                if "time=" in line:
-                    if self.duration:
-                        done = get_text(line, ("time=", "bitrate"))
-                        total = self.duration
-                        try:
-                            doneT = Time(done, "hh:mm:ss.F")
-                            totalT = Time(total, "S.F")
-                        except ValueError:
-                            doneT = Time("1", "s")
-                            totalT = Time("1", "s")
-                        dones = doneT.in_secs()
-                        totals = totalT.in_secs()
-                        self.perc = round((dones * 100 / totals), 2)
-                        if self.perc < 0:
-                            self.perc = 0.0
-                        if self.perc > 100:
-                            self.perc = 100
-                        ns = time.time_ns() - start_time
-                        etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
-                        if etat < 0:
-                            etat = 0.0
-                        try:
-                            etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
-                        except ValueError:
-                            etaT = Time("0", "S")
-                        self.eta = etaT.classic()
-                    else:
-                        self.eta = "Unknown"
-                    print(f"\rMerging... {self.perc}%  ETA: {self.eta}", end="")
-                    if self.app:
-                        self.progress_bar.set(self.perc / 100)
-                        self.label.set_text(text=f"Merging... {self.perc}%  ETA: {self.eta}")
 
-        # proc.wait()
-
-        # stdout, stderr = proc.communicate()
-        # print(stdout, stderr)
-        if not self.stop_bool:
-            os.remove(video_loc)
-            os.remove(audio_loc)
-            print("\nDone merging")
-        """
         # DOING: cambia VideoFileClip con ffmpeg
-        self.logger.update_time(time.time())
-        self.logger.update_idx(idx)
         # Open the video file
         # clip = VideoFileClip(self.video_file)
         start_time: float
@@ -488,7 +441,7 @@ class VideoTrimmer(threading.Thread):
         try:
             start_time = 0.0 if not start_ins else self.parse_time(start_ins)
 
-            end_time = Time(self.master.duration, "S.F").in_secs() if not end_ins else self.parse_time(end_ins)
+            end_time = Time(self.duration, "hh:mm:ss.F").in_secs() if not end_ins else self.parse_time(end_ins)
 
             if start_time >= end_time:
                 raise ValueError("Start time is bigger than end time")
@@ -501,13 +454,54 @@ class VideoTrimmer(threading.Thread):
                 # Write the trimmed video to a new file
                 title = self.video_file[:self.video_file.rindex(".mp4")]+f"_[{start_ins.replace(':','.') if start_ins else 'Start'}-{end_ins.replace(':','.') if end_ins else 'End'}].mp4"
 
-                self.logger.update_name(title)
-                self.label.set_text("Starting to cut...")
                 # DOING: aggiungi il comando con il Popen e prendi dallo STDOUT il tempo e parsalo
                 self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
                 self.progress_bar.set(0)
                 self.progress_bar.rel_place() if self.progress_bar.rel_pos else self.progress_bar.abs_place()
-                command = f"{ffmpeg_loc} -i -ss {start_time} -to {end_time} {self.video_file} -c copy -qscale 0 -avoid_negative_ts 1 -y {title}".split(" ")
+                command = f"{ffmpeg_loc} -i {self.video_file} -ss {start_time} -to {end_time} -c copy -qscale 0 -avoid_negative_ts 1 -y {title}".split(" ")
+                self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                             universal_newlines=True)
+                print(f"Starting cut #{idx+1}")
+                start_time = time.time_ns()
+                output = self.proc.stdout
+                if not self.stop_bool:
+                    for line in output:
+                        print(line)
+                        if "Duration" in line:
+                            self.duration = get_text(line, ("Duration: ", ", start:"))
+                        if "time=" in line:
+                            if self.duration:
+                                done = get_text(line, ("time=", "bitrate"))
+                                total = self.duration
+                                try:
+                                    doneT = Time(done, "hh:mm:ss.F")
+                                    totalT = Time(total, "hh:mm:ss.F")
+                                except ValueError:
+                                    doneT = Time("1", "s")
+                                    totalT = Time("1", "s")
+                                dones = doneT.in_secs()
+                                totals = totalT.in_secs()
+                                self.perc = round((dones * 100 / totals), 2)
+                                if self.perc < 0:
+                                    self.perc = 0.0
+                                if self.perc > 100:
+                                    self.perc = 100
+                                ns = time.time_ns() - start_time
+                                etat = (ns * 100 / (self.perc if self.perc != 0 else 0.05) - ns) / 1e9
+                                if etat < 0:
+                                    etat = 0.0
+                                try:
+                                    etaT = Time((str(etat) if etat > 0 else "0.0"), "S.F")
+                                except ValueError:
+                                    etaT = Time("0", "S")
+                                self.eta = etaT.classic()
+                            else:
+                                self.eta = "Unknown"
+                                self.perc = "Unknown"
+                            print(f"\rCutting #{idx+1}... {self.perc}%  ETA: {self.eta}", end="")
+                            if self.master:
+                                self.progress_bar.set(self.perc / 100) if self.perc != "Unknown" else self.progress_bar.set(0.5)
+                                self.label.set_text(f"Cutting #{idx+1}... {self.perc}%  ETA: {self.eta}")
                 #trimmed_clip.write_videofile(title, logger=self.logger)
 
                 # Close the video file
@@ -518,8 +512,6 @@ class VideoTrimmer(threading.Thread):
         except ValueError as e:
             self.label.set_text(f"Error: {str(e)}")
             self.label.rel_place() if self.label.rel_pos else self.label.abs_place()
-        finally:
-            # clip.close()
 
 
 
@@ -1174,7 +1166,6 @@ class App(ctk.CTk):
     dim: tuple[int, int]
     font: ctk.CTkFont = None
     file_loc: str = None
-    duration: str = None
     def __init__(self):
         # CHECK: usa il main label per mostrare le informazioni "di percorso": piazzalo all'inizio e cambia ciò
         #  che c'è scritto in base all'operazione scelta
@@ -1654,4 +1645,7 @@ if __name__ == "__main__":
 # TODO: useless
 #  label dell'upgrade (e tasto update??)
 
-
+# FIXME:
+#  animazione troppo piccola.
+#  Link entry quando viene pulito non lascia "Enter file..."
+#  Cut thread non viene interrotto se è presente
