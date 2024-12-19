@@ -29,6 +29,11 @@ print(yt_dlp_loc)
 ffmpeg_loc = os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))), "bin", "ffmpeg.exe")
 ico_loc = os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))),"utils", "ico", "download.ico")
 
+temp_dir = os.environ.get("TEMP")
+
+if not os.path.exists(f"{temp_dir}\\YTCutter"):
+    os.mkdir(f"{temp_dir}\\YTCutter")
+
 EXTENSIONS = ("3g2", "3gp", "a64", "ac3", "ac4", "adts", "adx", "aea", "aiff", "alaw", "alp", "amr", "amv", "apm", "apng", "aptx", "aptx_hd", "argo_asf", "argo_cvg", "asf", "asf_stream", "ass", "ast", "au", "avi", "avif", "avm2", "avs2", "avs3", "bit", "d caca", "caf", "cavsvideo", "chromaprint", "codec2", "codec2raw", "crc", "dash", "data", "daud", "dfpwm", "dirac", "dnxhd", "dts", "dv", "dvd", "eac3", "evc", "f32be", "f32le", "f4v", "f64be", "f64le", "ffmetadata", "fifo", "film_cpk", "filmstrip", "fits", "flac", "flv", "framecrc", "framehash", "framemd5", "g722", "g723_1", "g726", "g726le", "gif", "gsm", "gxf", "h261", "h263", "h264", "hash", "hds", "hevc", "hls", "iamf", "ico", "ilbc", "image2", "image2pipe", "ipod", "ircam", "ismv", "ivf", "jacosub", "kvag", "latm", "lc3", "lrc", "m4v", "matroska", "md5", "microdvd", "mjpeg", "mlp", "mmf", "mov", "mp2", "mp3", "mp4", "mpeg", "mpeg1video", "mpeg2video", "mpegts", "mpjpeg", "mulaw", "mxf", "mxf_d10", "mxf_opatom", "null", "nut", "obu", "oga", "ogg", "ogv", "oma", "opus", "psp", "rawvideo", "rcwt", "rm", "roq", "rso", "rtp", "rtp_mpegts", "rtsp", "s16be", "s16le", "s24be", "s24le", "s32be", "s32le", "s8", "sap", "sbc", "scc", "d sdl", "sdl2", "segment", "smjpeg", "sox", "spdif", "spx", "srt", "streamhash", "sup", "svcd", "swf", "tee", "truehd", "tta", "ttml", "u16be", "u16le", "u24be", "u24le", "u32be", "u32le", "u8", "vc1", "vc1test", "vcd", "vidc", "vob", "voc", "vvc", "w64", "wav", "webm", "webm_chunk", "webp", "webvtt", "wsaud", "wtv", "wv", "yuv4mpegpipe")
 if not os.path.exists(yt_dlp_loc) or not os.path.exists(ffmpeg_loc):
     print("Cant find executable files")
@@ -209,7 +214,7 @@ class DownloadThread(threading.Thread):
             self.app.download_button.configure(state="normal", fg_color=self.app.cut_button.cget("fg_color"))
     def download(self, mode: str):
         #print(f"Starting {mode}")
-        command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == 'audio' else self.video_out} -f {'bestaudio[ext=m4a]' if mode == 'audio' else 'bestvideo[ext=mp4]' if mode == 'Best' else self.quality}".split()
+        command = f"{yt_dlp_loc} {self.link} -o {self.audio_out if mode == 'audio' else self.video_out} -f {'bestaudio[ext=m4a]' if mode == 'audio' else 'bestvideo[ext=mp4]' if mode == 'Best' else self.quality} --paths temp:{temp_dir}\\YTCutter".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
 
         start_time = time.time_ns()
@@ -297,9 +302,9 @@ class DownloadThread(threading.Thread):
             print("\nDone merging")
     def fastdownload(self, quality):
         if quality != "Fixed":
-            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {'best[ext=mp4]' if quality == 'Fast' else 'worst[ext=mp4]'}".split()
+            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} -f {'best[ext=mp4]' if quality == 'Fast' else 'worst[ext=mp4]'} --paths temp:{temp_dir}\\YTCutter".split()
         else:
-            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc}".split()
+            command = f"{yt_dlp_loc} {self.link} -o {self.output_loc} --paths temp:{temp_dir}\\YTCutter".split()
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
         start_time = time.time_ns()
         print(f"Starting fast download")
